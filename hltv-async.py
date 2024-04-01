@@ -8,38 +8,47 @@ from functools import partial
 
 from aiohttp import ClientSession, ClientTimeout
 from aiohttp.client_exceptions import ClientProxyConnectionError, ClientResponseError, ClientOSError, \
-    ServerDisconnectedError
+    ServerDisconnectedError, ClientHttpProxyError
 
 import logging
 
 
-class HltvAsync:
-    def __init__(self):
+class Hltv:
+    def __init__(self, max_delay: int = 15,
+                 timeout: int = 5,
+                 use_proxy: bool = False,
+                 proxy_path: str | None = None,
+                 proxy_list: list | None = None,
+                 debug: bool = False):
         self.headers = {
             "referer": "https://www.hltv.org/stats",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
             "hltvTimeZone": "UTC"
         }
 
-        self.MAX_DELAY = 15
-        self.USE_PROXY = False
-        self.PROXY_FILE_PATH = None
-        self.PROXY_LIST = []
-        self.DEBUG = False
+        self.MAX_DELAY = max_delay
+        self.timeout = timeout
+        self.USE_PROXY = use_proxy
+        self.PROXY_PATH = proxy_path
+        self.PROXY_LIST = proxy_list
+        self.DEBUG = debug
         self._configure_logging()
         self.logger = logging.getLogger(__name__)
 
     def _configure_logging(self):
         level = logging.DEBUG if self.DEBUG else logging.INFO
-        logging.basicConfig(level=level, format='%(asctime)s - %(levelname)s - %(message)s')
+        logging.basicConfig(level=level)
 
-    def config(self, max_delay: int = None,
-               use_proxy: bool = False,
+    def config(self, max_delay: int | None = None,
+               timeout: int | None = None,
+               use_proxy: bool | None = None,
                proxy_file_path: str | None = None,
                proxy_list: list | None = None,
-               debug: bool = False):
+               debug: bool | None = None):
         if max_delay:
             self.MAX_DELAY = max_delay
+        if timeout:
+            self.timeout = timeout
         if use_proxy:
             self.USE_PROXY = use_proxy
         if proxy_file_path:
@@ -47,13 +56,13 @@ class HltvAsync:
         if proxy_list:
             self.PROXY_LIST = proxy_list
 
-        if debug != self.DEBUG:
+        if debug:
             self.DEBUG = debug
             self._configure_logging()
 
     def get_proxy(self):
-        if self.PROXY_FILE_PATH:
-            with open(self.PROXY_FILE_PATH, "r") as file:
+        if self.PROXY_PATH:
+            with open(self.PROXY_PATH, "r") as file:
                 proxy = file.readline().strip()
                 if proxy:
                     return proxy
@@ -61,8 +70,8 @@ class HltvAsync:
             return self.PROXY_LIST[0]
 
     def switch_main_proxy(self, proxy):
-        if self.PROXY_FILE_PATH:
-            with open(self.PROXY_FILE_PATH, "r+") as file:
+        if self.PROXY_PATH:
+            with open(self.PROXY_PATH, "r+") as file:
                 proxies = file.readlines()
                 file.seek(0)
                 for line in proxies:
@@ -72,11 +81,11 @@ class HltvAsync:
         else:
             self.PROXY_LIST = self.PROXY_LIST[1:] + [self.PROXY_LIST[0]]
 
-    async def f(self, result):
+    def f(self, result):
         return BeautifulSoup(result, "lxml")
 
     async def cloudflare_check(self, result) -> bool:
-        page = await self.f(result)
+        page = self.f(result)
         challenge_page = page.find(id="challenge-error-title")
         if challenge_page is not None:
             if "Enable JavaScript and cookies to continue" == challenge_page.get_text():
@@ -85,15 +94,15 @@ class HltvAsync:
 
     async def call_again(self, url, proxy, delay):
         if self.USE_PROXY:
-            self.logger.info("Switching proxy", proxy)
+            self.logger.info(f"Switching proxy {proxy}")
             self.switch_main_proxy(proxy)
-            self.logger.debug("New proxy: ", self.get_proxy())
+            self.logger.debug(f"New proxy: {self.get_proxy()}")
             return await self.fetch(url)
         else:
             if delay < self.MAX_DELAY:
                 delay += 1
             else:
-                self.logger.warning("Reached max limit, try to use Proxy mode")
+                self.logger.warning("Reached max delay limit, try to use Proxy mode")
             self.logger.info(f"Calling again, increasing delay to {delay}s")
             return await self.fetch(url, delay=delay)
 
@@ -103,31 +112,30 @@ class HltvAsync:
         if self.USE_PROXY:
             proxy = self.get_proxy()
 
-        # delay, only for non proxy users. (max 15s)
+        # delay, only for non proxy users. (default = 1-15s)
         await asyncio.sleep(delay)
-
         async with ClientSession() as session:
             try:
-                async with session.get(url, headers=self.headers, proxy=proxy) as response:
-                    self.logger.info("Fetching ", url, ", code ", response.status)
+                async with session.get(url, headers=self.headers, proxy=proxy, timeout=self.timeout) as response:
+                    self.logger.info(f"Fetching {url}, code: {response.status}")
                     if response.status == 403 or response.status == 404:
                         self.logger.debug("Got 403 forbitten")
                         return await self.call_again(url, proxy, delay)
 
-                    # cheking for challenge page.
+                    # checking for challenge page.
                     result = await response.text()
                     if await self.cloudflare_check(result):
                         self.logger.debug("Got cloudflare challange page")
                         return await self.call_again(url, proxy, delay)
 
-                    # running executet loop if everything okay
+                    # running executed loop if everything okay
                     loop = get_running_loop()
                     parsed = await loop.run_in_executor(None, partial(self.f, result))
                     return parsed
-            except (ClientProxyConnectionError, ClientResponseError, ClientOSError, ServerDisconnectedError, TimeoutError):
-                self.logger.debug("Got 404 Connection Error to ", proxy)
+            except (ClientProxyConnectionError, ClientResponseError, ClientOSError,
+                    ServerDisconnectedError, TimeoutError, ClientHttpProxyError) as e:
+                self.logger.debug(f"Got 404 ({e}) ({proxy})")
                 return await self.call_again(url, proxy, delay)
-
 
     def save_error(self, page):
         with open("error.html", "w") as file:
@@ -148,7 +156,6 @@ class HltvAsync:
             stars = [line.get('stars') for line in liveMatchContainer]
             return [{'teams': teams, 'maps': maps, 'stars': stars} for teams, maps, stars in zip(matches, maps, stars)]
 
-
     async def get_upcoming_matches(self):
         """returns a list of all upcoming matches on HLTV"""
         r = await self.fetch("https://www.hltv.org/matches")
@@ -159,7 +166,6 @@ class HltvAsync:
         except AttributeError:
             return None
         return [(team1, team2) for team1, team2 in tuple(zip(teams, teams[1:]))[::2]]
-
 
     async def get_important_upcoming_matches(self, star_rating=1):
         """returns a list of all upcoming matches on HLTV with the star rating argument (should be between 0 and 5)"""
@@ -175,7 +181,6 @@ class HltvAsync:
         matches = [(team1, team2) for team1, team2 in tuple(zip(teams, teams[1:]))[::2]]
         # assert len(matches) == len(stars), "Internal Exception :: get_important_upcoming_matches() :: misMatches detected"
         return [match for match, star in zip(matches, stars) if star == star_rating]
-
 
     async def get_big_results(self, offset=0) -> list[dict[str, Any]] | None:
         """returns a list of results from past 100 matches on HLTV starting from the offset param"""
@@ -281,7 +286,6 @@ class HltvAsync:
 
         return matches
 
-
     async def get_events(self, outgoing=True, future=True, max_events=10):
         """Returns events
         :params:
@@ -340,7 +344,6 @@ class HltvAsync:
 
         return events
 
-
     async def get_top_teams(self, max_teams=30):
         """
         returns a list of the top 1-30 teams
@@ -350,45 +353,51 @@ class HltvAsync:
         [('rank','title','points', 'change', 'id')]
         change - difference between last ranking update
         """
-        day = date.today()
-
+        today = date.today()
+        current_weekday = today.weekday()
+        last_monday = today - timedelta(days=current_weekday)
+        
         teams = []
 
-        r = await self.fetch("https://www.hltv.org/ranking/teams/" + day.strftime('%Y/%B/%d').lower())
-        i = 1
-        for team in r.find_all("div", {'class': "ranked-team standard-box"}):
-            if i > max_teams:
-                break
-            i += 1
+        r = await self.fetch("https://www.hltv.org/ranking/teams/" + last_monday.strftime('%Y/%B/%d').lower())
 
-            rank = team.find('span', {'class': 'position'}).text[1:]
-            title_div: Any
-            if rank != '1':
-                title_div = team.find('div', {'class': 'teamLine sectionTeamPlayers'})
-            else:
-                title_div = team.find('div', {'class': 'teamLine sectionTeamPlayers teamLineExpanded'})
-
-            title = title_div.find('span', {'class': 'name'}).text
-            points = title_div.find('span', {'class': 'points'}).text.split(' ', 1)[0][1:]
-
-            id = team.find('a', {'class': 'details moreLink'})['href'].split('/')[-1]
-
-            changes = {'change positive', 'change neutral', 'change negative'}
-            change = ''
-            for change_ in changes:
-                try:
-                    change = team.find('div', {'class', change_}).text
+        try:
+            i = 1
+            for team in r.find_all("div", {'class': "ranked-team standard-box"}):
+                if i > max_teams:
                     break
-                except AttributeError:
-                    pass
+                i += 1
 
-            teams.append({
-                'rank': rank,
-                'title': title,
-                'points': points,
-                'change': change,
-                'id': id
-            })
+                rank = team.find('span', {'class': 'position'}).text[1:]
+                title_div: Any
+                if rank != '1':
+                    title_div = team.find('div', {'class': 'teamLine sectionTeamPlayers'})
+                else:
+                    title_div = team.find('div', {'class': 'teamLine sectionTeamPlayers teamLineExpanded'})
+
+                title = title_div.find('span', {'class': 'name'}).text
+                points = title_div.find('span', {'class': 'points'}).text.split(' ', 1)[0][1:]
+
+                id = team.find('a', {'class': 'details moreLink'})['href'].split('/')[-1]
+
+                changes = {'change positive', 'change neutral', 'change negative'}
+                change = ''
+                for change_ in changes:
+                    try:
+                        change = team.find('div', {'class', change_}).text
+                        break
+                    except AttributeError:
+                        pass
+
+                teams.append({
+                    'rank': rank,
+                    'title': title,
+                    'points': points,
+                    'change': change,
+                    'id': id
+                })
+        except AttributeError:
+            raise AttributeError("Parsing error, probably page not fully loaded")
 
         return teams
 
@@ -485,9 +494,16 @@ class HltvAsync:
 
         return players
 
-
     # TODO WRITE
     async def get_last_news(self):
         return []
 
+
+async def test():
+    hltv = Hltv(debug=True)
+    print(await hltv.get_top_teams())
+    print(await hltv.get_best_players())
+
+if __name__ == "__main__":
+    asyncio.run(test())
 
