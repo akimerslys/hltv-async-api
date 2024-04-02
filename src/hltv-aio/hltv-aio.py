@@ -141,6 +141,17 @@ class Hltv:
         with open("error.html", "w") as file:
             file.write(page.prettify())
 
+
+    def normalize_date(self, parts) -> str:
+        month_abbreviations = {
+            'Jan': '1', 'Feb': '2', 'Mar': '3', 'Apr': '4',
+            'May': '5', 'Jun': '6', 'Jul': '7', 'Aug': '8',
+            'Sep': '9', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+        }
+        month = month_abbreviations[parts[0]]
+        day = parts[1][:-2]
+        return day + '-' + month
+
     async def get_live_matches(self):
         """returns a list of all LIVE matches on HLTV along with the maps being played and the star ratings"""
         r = await self.fetch("https://www.hltv.org/matches")
@@ -295,15 +306,6 @@ class Hltv:
         :return:
         [('id', 'title', 'startdate', 'enddate')]
         """
-        month_abbreviations = {
-            'Jan': '1', 'Feb': '2', 'Mar': '3', 'Apr': '4',
-            'May': '5', 'Jun': '6', 'Jul': '7', 'Aug': '8',
-            'Sep': '9', 'Oct': '10', 'Nov': '11', 'Dec': '12'
-        }
-        def normalize_date(parts: list) -> str:
-            month = month_abbreviations[parts[0]]
-            day = parts[1][:-2]
-            return day + '-' + month
 
         r = await self.fetch('https://www.hltv.org/events')
 
@@ -312,9 +314,9 @@ class Hltv:
             for event in r.find('div', {'class': 'tab-content', 'id': 'TODAY'}).find_all('a', {
                 'class': 'a-reset ongoing-event'}):
                 event_name = event.find('div', {'class': 'text-ellipsis'}).text.strip()
-                event_start_date = normalize_date(event.find('span', {'data-time-format': 'MMM do'}).text.strip().split())
+                event_start_date = self.normalize_date(event.find('span', {'data-time-format': 'MMM do'}).text.strip().split())
 
-                event_end_date = normalize_date(event.find_all('span', {'data-time-format': 'MMM do'})[1].text.strip().split())
+                event_end_date = self.normalize_date(event.find_all('span', {'data-time-format': 'MMM do'})[1].text.strip().split())
                 event_id = event['href'].split('/')[-2]
 
                 events.append({
@@ -334,8 +336,8 @@ class Hltv:
                     event_id = event['href'].split('/')[-2]
                     event_name = event.find('div', {'class': 'big-event-name'}).text.strip()
                     # event_location = event.find('span', {'class': 'big-event-location'}).text.strip()
-                    event_start_date = normalize_date(event.find('span', {'class': ''}).text.strip().split())
-                    event_end_date = normalize_date(event.find('span', {'class': ''}).text.strip().split())
+                    event_start_date = self.normalize_date(event.find('span', {'class': ''}).text.strip().split())
+                    event_end_date = self.normalize_date(event.find('span', {'class': ''}).text.strip().split())
 
                     events.append({
                         'id': event_id,
@@ -345,6 +347,34 @@ class Hltv:
                     })
 
         return events
+
+    async def get_event_info(self, event_id: str | int, event_title: str):
+        r = await self.fetch(f"https://www.hltv.org/events/{str(event_id)}/{event_title.replace(' ', '-')}")
+
+        event_date_div = r.find('td', {'class', 'eventdate'}).find_all('span')
+
+        event_start = self.normalize_date(event_date_div[0].text.split())
+        event_end = self.normalize_date(event_date_div[1].text.split()[1:-1])
+
+        prize = r.find('td', {'class', 'prizepool text-ellipsis'}).text
+
+        team_num = r.find('td', {'class', 'teamsNumber'}).text
+        
+        location = r.find('td', {'class', 'location gtSmartphone-only'}).get_text().replace('\n', '')
+
+        try:
+            group_div = r.find('div', {'class', 'groups-container'})
+            groups = []
+            for group in group_div.find_all('table', {'class': 'table standard-box'}):
+                group_name = group.find('td', {'class': 'table-header group-name'}).text
+                teams = []
+                for team in group.find_all('div', 'text-ellipsis'):
+                    teams.append(team.find('a').text)
+                groups.append({group_name: teams})
+        except AttributeError:
+            groups = []
+
+        return (event_id, event_title, event_start, event_end, prize, team_num, location, groups)
 
     async def get_top_teams(self, max_teams=30):
         """
@@ -498,7 +528,7 @@ class Hltv:
 
 async def test():
     hltv = Hltv()
-    print(await hltv.get_events())
+    print(await hltv.get_event_info(7148, 'pgl-cs2-major-copenhagen-2024'))
 
 if __name__ == "__main__":
     asyncio.run(test())
