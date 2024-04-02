@@ -3,7 +3,7 @@
 :license: MIT
 """
 
-from .hltv_aio import Hltv
+from .aiohltv import Hltv
 
 __author__ = 'akimerslys'
-__version__ = '0.1.0'
+__version__ = '0.2.6'

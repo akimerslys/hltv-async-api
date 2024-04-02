@@ -14,7 +14,7 @@
 # Installation
 
 ```
-pip install hltv_async_api
+pip install hltv-async-api
 ```
 
 ---
@@ -61,6 +61,17 @@ proxy_list = ['120.234.203.171:9002', '110.38.68.38:80']
 
 hltv = Hltv(use_proxy=True, proxy_list=proxy_list, proxy_protocol='http')
 ```
+
+---
+# Methods
+* get_upcoming_matches(days: int = 7, min_star_rating: int = 1)
+```returns ['date': '11/11/2024', 'matches': [team1: 'Natus Vincere' | 'TBD', team2: 'FaZe' | 'TBD', time: '14:15', maps: '3', stars: 5, 'PGL CS2 Major Copenhagen 2024' | None]]```
+
+* def get_event_results(event_id: int | str) -> list[dict[str, Any]] | None:
+```returns ['date': '11/11/2024', 'team1': 'FaZe', 'team2': 'Natus Vincere', 'score1': '1', 'score2': '2']```
+
+* get_event_matches(self, event_id: str | int):
+```returns ['team1': 'Natus Vincere', 'team2': 'FaZe', 'date': '11/11/2024' | 'LIVE']```
 ---
 # Examples
 
@@ -79,7 +90,6 @@ async def test():
 if __name__ == "__main__":
     asyncio.run(test())
 ```
-
 
 ****Proxy Parser****
 ```

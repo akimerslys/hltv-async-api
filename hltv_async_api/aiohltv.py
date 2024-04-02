@@ -86,8 +86,8 @@ class Hltv:
         else:
             proxy = self.PROXY_LIST[0]
 
-        if self.PROXY_PROTOCOL not in proxy and proxy != '':
-            proxy = self.PROXY_PROTOCOL + '://' + proxy
+        if self.PROXY_PROTOCOL and proxy != '' and self.PROXY_PROTOCOL not in proxy:
+       	    proxy = self.PROXY_PROTOCOL + '://' + proxy
 
         return proxy
 
@@ -133,7 +133,6 @@ class Hltv:
         return delay
 
     async def parse(self, session, url, delay):
-
         proxy = ''
         # setup new proxy, cuz old one was switched
         if self.USE_PROXY:
@@ -146,12 +145,12 @@ class Hltv:
                 self.logger.info(f"Fetching {url}, code: {response.status}")
                 if response.status == 403 or response.status == 404:
                     self.logger.debug("Got 403 forbitten")
-                    return False, self.parse_error_handler(proxy, delay)
+                    return False, await self.parse_error_handler(proxy, delay)
 
                 # checking for challenge page.
                 result = await response.text()
                 if await self.cloudflare_check(result):
-                    return False, self.parse_error_handler(proxy, delay)
+                    return False, await self.parse_error_handler(proxy, delay)
 
                 return True, result
         except (ClientProxyConnectionError, ClientResponseError, ClientOSError,
@@ -200,6 +199,8 @@ class Hltv:
     async def get_live_matches(self):
         """returns a list of all LIVE matches on HLTV along with the maps being played and the star ratings"""
         r = await self.fetch("https://www.hltv.org/matches")
+        if not r:
+            return
 
         live_matches = r.find("div", {'class', "liveMatchesContainer"})
         if live_matches is None:
@@ -212,27 +213,74 @@ class Hltv:
             stars = [line.get('stars') for line in liveMatchContainer]
             return [{'teams': teams, 'maps': maps, 'stars': stars} for teams, maps, stars in zip(matches, maps, stars)]
 
-    async def get_upcoming_matches(self):
+    async def get_upcoming_matches(self, days: int = 7, star_rating: int = 1):
         """returns a list of all upcoming matches on HLTV"""
         r = await self.fetch("https://www.hltv.org/matches")
+        if not r:return
+
+        matches = []
         try:
-            teams = [line.getText() for line in r.find("div",
-                                                       {'class', "upcomingMatchesContainer"}).find_all(
-                class_=lambda v: v is not None and (v == "team text-ellipsis" or v == "matchTeamName text-ellipsis"))]
+
+
+            for i, date_div in enumerate(r.find_all('div', {'class': 'upcomingMatchesSection'}), start=1):
+                if i > days:
+                    break
+                date_ = date_div.find('span', {'class': 'matchDayHeadline'}).text.split()[-1]
+                matches_today = []
+
+                for match in date_div.find_all('div', {'class': 'upcomingMatch'}):
+                    time_ = match.find('div', {'class': 'matchTime'}).text
+                    rating = int(match['stars'])
+                    if rating >= star_rating:
+                        maps = match.find('div', {'class': 'matchMeta'}).text[-1:]
+                        try:
+                            teams = match.find_all('div', {'class': 'matchTeamName text-ellipsis'})
+
+                            team1 = teams[0].text
+                            team2 = teams[1].text
+                        except (IndexError, AttributeError):
+                            team1 = 'TBD'
+                            team2 = 'TBD'
+
+                        try:
+                            event = match.find('div', {'class', 'matchEventName gtSmartphone-only'}).text
+                        except AttributeError:
+
+                            try:
+                                event = match.find('span', {'class': 'line-clamp-3'}).text
+                            except AttributeError:
+                                event = ''
+
+                        matches_today.append({
+                            'team1': team1,
+                            'team2': team2,
+                            'time': time_,
+                            'maps': maps,
+                            'rating': rating,
+                            'event': event
+                    })
+
+                matches.append({
+                    'date': date_,
+                    'matches': matches_today
+                })
         except AttributeError:
             return None
-        return [(team1, team2) for team1, team2 in tuple(zip(teams, teams[1:]))[::2]]
+        return matches
 
     async def get_important_upcoming_matches(self, star_rating=1):
         """returns a list of all upcoming matches on HLTV with the star rating argument (should be between 0 and 5)"""
         r = await self.fetch("https://www.hltv.org/matches")
+        if not r:
+            return
 
         teams = [line.getText() for line in r.find("div",
                                                    {'class', "upcomingMatchesContainer"}).find_all(
             class_=lambda v: v is not None and (v == "team text-ellipsis" or v == "matchTeamName text-ellipsis"))]
         stars = [int(line.get('stars')) for line in r.find("div",
-                                                           {'class', "upcomingMatchesContainer"}).find_all("div", {"class",
-                                                                                                                   "upcomingMatch "})
+                                                           {'class', "upcomingMatchesContainer"}).find_all("div",
+                                                                                                           {"class",
+                                                                                                            "upcomingMatch "})
                  if line.get('team1') is not None]
         matches = [(team1, team2) for team1, team2 in tuple(zip(teams, teams[1:]))[::2]]
         # assert len(matches) == len(stars), "Internal Exception :: get_important_upcoming_matches() :: misMatches detected"
@@ -241,6 +289,8 @@ class Hltv:
     async def get_big_results(self, offset=0) -> list[dict[str, Any]] | None:
         """returns a list of results from past 100 matches on HLTV starting from the offset param"""
         r = await self.fetch("https://www.hltv.org/results?offset=" + str(offset))
+        if not r:
+            return
 
         big_results = []
         big_res = r.find("div", {'class', "big-results"}).find_all("div", {"class", "result-con"})
@@ -263,8 +313,10 @@ class Hltv:
 
         return big_results
 
-    async def get_event_results(self, event: int | str) -> list[dict[str, Any]]:
+    async def get_event_results(self, event: int | str) -> list[dict[str, Any]] | None:
         r = await self.fetch("https://www.hltv.org/results?event=" + str(event))
+        if not r:
+            return
 
         match_results = []
 
@@ -293,6 +345,8 @@ class Hltv:
 
     async def get_event_matches(self, event_id: str | int):
         r = await self.fetch("https://www.hltv.org/events/" + str(event_id) + "/matches")
+        if not r:
+            return
 
         live_matches: List | Any
         matches = []
@@ -306,7 +360,7 @@ class Hltv:
             team1 = teams[0].text.strip()
             team2 = teams[1].text.strip()
 
-                # TODO FIX SCORES
+            # TODO FIX SCORES
             try:
                 scores = live.find("td", class_="matchTeamScore").text.strip().split('-')
                 score_team1 = scores[0].strip()
@@ -316,9 +370,9 @@ class Hltv:
                 score_team2 = 0
 
             matches.append({
-                    'team1': team1,
-                    'team2': team2,
-                    'date': 'LIVE'
+                'team1': team1,
+                'team2': team2,
+                'date': 'LIVE'
             })
 
         for date_sect in r.find_all('div', {'class': 'upcomingMatchesSection'}):
@@ -353,15 +407,19 @@ class Hltv:
         """
 
         r = await self.fetch('https://www.hltv.org/events')
+        if not r:
+            return
 
         events = []
         if outgoing:
             for event in r.find('div', {'class': 'tab-content', 'id': 'TODAY'}).find_all('a', {
-                'class': 'a-reset ongoing-event'}):
+                                'class': 'a-reset ongoing-event'}):
                 event_name = event.find('div', {'class': 'text-ellipsis'}).text.strip()
-                event_start_date = self.normalize_date(event.find('span', {'data-time-format': 'MMM do'}).text.strip().split())
+                event_start_date = self.normalize_date(
+                    event.find('span', {'data-time-format': 'MMM do'}).text.strip().split())
 
-                event_end_date = self.normalize_date(event.find_all('span', {'data-time-format': 'MMM do'})[1].text.strip().split())
+                event_end_date = self.normalize_date(
+                    event.find_all('span', {'data-time-format': 'MMM do'})[1].text.strip().split())
                 event_id = event['href'].split('/')[-2]
 
                 events.append({
@@ -395,6 +453,8 @@ class Hltv:
 
     async def get_event_info(self, event_id: str | int, event_title: str):
         r = await self.fetch(f"https://www.hltv.org/events/{str(event_id)}/{event_title.replace(' ', '-')}")
+        if not r:
+            return
 
         event_date_div = r.find('td', {'class', 'eventdate'}).find_all('span')
 
@@ -404,7 +464,7 @@ class Hltv:
         prize = r.find('td', {'class', 'prizepool text-ellipsis'}).text
 
         team_num = r.find('td', {'class', 'teamsNumber'}).text
-        
+
         location = r.find('td', {'class', 'location gtSmartphone-only'}).get_text().replace('\n', '')
 
         try:
@@ -419,7 +479,7 @@ class Hltv:
         except AttributeError:
             groups = []
 
-        return (event_id, event_title, event_start, event_end, prize, team_num, location, groups)
+        return event_id, event_title, event_start, event_end, prize, team_num, location, groups
 
     async def get_top_teams(self, max_teams=30):
         """
@@ -433,10 +493,13 @@ class Hltv:
         today = date.today()
         current_weekday = today.weekday()
         last_monday = today - timedelta(days=current_weekday)
-        
+
         teams = []
 
         r = await self.fetch("https://www.hltv.org/ranking/teams/" + last_monday.strftime('%Y/%B/%d').lower())
+
+        if not r:
+            return
 
         try:
             for i, team in enumerate(r.find_all("div", {'class': "ranked-team standard-box"}), start=1):
@@ -532,6 +595,9 @@ class Hltv:
         r = await self.fetch(
             f"https://www.hltv.org/stats/players?startDate={year}-01-01&endDate={year}-12-31&rankingFilter=Top20")
 
+        if not r:
+            return
+
         players = []
         rank = 1
         try:
@@ -572,10 +638,9 @@ class Hltv:
 
 
 async def test():
-
     hltv = Hltv()
-    print(await hltv.get_event_info(7148, 'pgl-cs2-major-copenhagen-2024'))
+    print(await hltv.get_upcoming_matches())
+
 
 if __name__ == "__main__":
     asyncio.run(test())
-
