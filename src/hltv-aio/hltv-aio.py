@@ -69,7 +69,7 @@ class Hltv:
         else:
             return self.PROXY_LIST[0]
 
-    def switch_main_proxy(self, proxy):
+    def switch_proxy(self, proxy):
         if self.PROXY_PATH:
             with open(self.PROXY_PATH, "r+") as file:
                 proxies = file.readlines()
@@ -95,14 +95,14 @@ class Hltv:
     async def call_again(self, url, proxy, delay):
         if self.USE_PROXY:
             self.logger.info(f"Switching proxy {proxy}")
-            self.switch_main_proxy(proxy)
+            self.switch_proxy(proxy)
             self.logger.debug(f"New proxy: {self.get_proxy()}")
             return await self.fetch(url)
         else:
             if delay < self.MAX_DELAY:
                 delay += 1
             else:
-                self.logger.warning("Reached max delay limit, try to use Proxy mode")
+                self.logger.warning("Reached max delay limit, try to use Proxy")
             self.logger.info(f"Calling again, increasing delay to {delay}s")
             return await self.fetch(url, delay=delay)
 
@@ -295,19 +295,26 @@ class Hltv:
         :return:
         [('id', 'title', 'startdate', 'enddate')]
         """
+        month_abbreviations = {
+            'Jan': '1', 'Feb': '2', 'Mar': '3', 'Apr': '4',
+            'May': '5', 'Jun': '6', 'Jul': '7', 'Aug': '8',
+            'Sep': '9', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+        }
+        def normalize_date(parts: list) -> str:
+            month = month_abbreviations[parts[0]]
+            day = parts[1][:-2]
+            return day + '-' + month
 
         r = await self.fetch('https://www.hltv.org/events')
-
-        with open('events.html', 'w', encoding='utf-8') as f:
-            f.write(r.prettify())
 
         events = []
         if outgoing:
             for event in r.find('div', {'class': 'tab-content', 'id': 'TODAY'}).find_all('a', {
                 'class': 'a-reset ongoing-event'}):
                 event_name = event.find('div', {'class': 'text-ellipsis'}).text.strip()
-                event_start_date = event.find('span', {'data-time-format': 'MMM do'}).text.strip()
-                event_end_date = event.find_all('span', {'data-time-format': 'MMM do'})[1].text.strip()
+                event_start_date = normalize_date(event.find('span', {'data-time-format': 'MMM do'}).text.strip().split())
+
+                event_end_date = normalize_date(event.find_all('span', {'data-time-format': 'MMM do'})[1].text.strip().split())
                 event_id = event['href'].split('/')[-2]
 
                 events.append({
@@ -318,22 +325,17 @@ class Hltv:
                 })
 
         if future:
-            i = 0
-            for big_event_div in r.find_all('div', {'class': 'big-events'}):
+            for i, big_event_div in enumerate(r.find_all('div', {'class': 'big-events'}, start=1)):
                 for event in big_event_div.find_all('a', {'class': 'a-reset standard-box big-event'}):
 
                     if i >= max_events:
                         break
 
-                    i += 1
-
                     event_id = event['href'].split('/')[-2]
                     event_name = event.find('div', {'class': 'big-event-name'}).text.strip()
                     # event_location = event.find('span', {'class': 'big-event-location'}).text.strip()
-                    event_start_date = event.find('span',
-                                                  {'class': ''}).text.strip()
-                    event_end_date = event.find('span',
-                                                {'class': ''}).text.strip()
+                    event_start_date = normalize_date(event.find('span', {'class': ''}).text.strip().split())
+                    event_end_date = normalize_date(event.find('span', {'class': ''}).text.strip().split())
 
                     events.append({
                         'id': event_id,
@@ -362,11 +364,9 @@ class Hltv:
         r = await self.fetch("https://www.hltv.org/ranking/teams/" + last_monday.strftime('%Y/%B/%d').lower())
 
         try:
-            i = 1
-            for team in r.find_all("div", {'class': "ranked-team standard-box"}):
+            for i, team in enumerate(r.find_all("div", {'class': "ranked-team standard-box"}), start=1):
                 if i > max_teams:
                     break
-                i += 1
 
                 rank = team.find('span', {'class': 'position'}).text[1:]
                 title_div: Any
@@ -422,17 +422,15 @@ class Hltv:
             age = '0'
             coach = ''
 
-            i = 1
-            for stat in r.find_all('div', {'class': 'profile-team-stat'}):
+            for i, stat in enumerate(r.find_all('div', {'class': 'profile-team-stat'}), start=1):
                 if i == 1:
                     rank = stat.find('a').text[1:]
-                if i == 2:
+                elif i == 2:
                     weeks = stat.find('span', {'class': 'right'}).text
-                if i == 3:
+                elif i == 3:
                     age = stat.find('span', {'class': 'right'}).text
-                if i == 4:
+                elif i == 4:
                     coach = stat.find('span', {'class': 'bold a-default'}).text[1:-1]
-                i += 1
 
             last_trophy = None
             total_trophys = None
@@ -445,7 +443,6 @@ class Hltv:
             return (team_id, title, rank, players, coach, age, weeks, last_trophy, total_trophys)
         except AttributeError:
             raise AttributeError("Parsing error, probably page not fully loaded")
-            return None
 
     async def get_best_players(self, top=40):
         """
@@ -500,9 +497,8 @@ class Hltv:
 
 
 async def test():
-    hltv = Hltv(debug=True)
-    print(await hltv.get_top_teams())
-    print(await hltv.get_best_players())
+    hltv = Hltv()
+    print(await hltv.get_events())
 
 if __name__ == "__main__":
     asyncio.run(test())

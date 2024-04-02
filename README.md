@@ -1,4 +1,4 @@
-# Hltv-async: An unofficial asynchronous HLTV API Wrapper for Python
+# Hltv-aio An unofficial asynchronous HLTV API Wrapper for Python
 
 # Features
 
@@ -14,7 +14,7 @@
 # Installation
 
 ```
-pip install hltv-async
+pip install hltv-aio
 ```
 
 ---
@@ -22,8 +22,7 @@ pip install hltv-async
 
 # Simple Usage
 ```
-from hltv-async import Hltv
-
+from hltv-aio import Hltv
 
 hltv = Hltv()
 live_matches = await hltv.get_live_matches()
@@ -45,10 +44,13 @@ proxy_list = ['http://120.234.203.171:9002', 'http://110.38.68.38:80']
 hltv = Hltv(use_proxy=True, proxy_list=proxy_list)
 ```
 ---
+# Examples
+
+
 
 # Requirements:
 
-Python 3.7+
+Python 3.9+
 
 License:
 HLTV Async is licensed under the MIT License, allowing for personal and commercial use with minimal restrictions.

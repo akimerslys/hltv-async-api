@@ -1,0 +1,18 @@
+[project]
+name = "hltv-aio"
+version = "0.1.0"
+authors = [
+  { name="Akim Slys", email="akimslys2003@gmail.com" },
+]
+description = "Hltv-aio An unofficial asynchronous HLTV API Wrapper for Python"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/akimerslys/aiohltv"
+Issues = "https://github.com/akimerslys/aiohltv/issues"
