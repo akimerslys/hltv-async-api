@@ -19,32 +19,42 @@ class Hltv:
                  use_proxy: bool = False,
                  proxy_path: str | None = None,
                  proxy_list: list | None = None,
-                 debug: bool = False):
+                 debug: bool = False,
+                 max_retries: int = 0,
+                 proxy_protocol: str | None = None,
+                 remove_proxy: bool = False
+                 ):
         self.headers = {
             "referer": "https://www.hltv.org/stats",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
             "hltvTimeZone": "UTC"
         }
-
         self.MAX_DELAY = max_delay
         self.timeout = timeout
+        self.max_retries = max_retries
         self.USE_PROXY = use_proxy
         self.PROXY_PATH = proxy_path
         self.PROXY_LIST = proxy_list
+        self.PROXY_PROTOCOL = proxy_protocol
+        self.REMOVE_PROXY = remove_proxy
         self.DEBUG = debug
         self._configure_logging()
         self.logger = logging.getLogger(__name__)
 
     def _configure_logging(self):
         level = logging.DEBUG if self.DEBUG else logging.INFO
-        logging.basicConfig(level=level)
+        logging.basicConfig(level=level, format="%(message)s")
 
     def config(self, max_delay: int | None = None,
                timeout: int | None = None,
                use_proxy: bool | None = None,
                proxy_file_path: str | None = None,
                proxy_list: list | None = None,
-               debug: bool | None = None):
+               debug: bool | None = None,
+               max_retries: int | None = None,
+               proxy_protocol: str | None = None,
+               remove_proxy: bool | None = None,
+               ):
         if max_delay:
             self.MAX_DELAY = max_delay
         if timeout:
@@ -52,32 +62,47 @@ class Hltv:
         if use_proxy:
             self.USE_PROXY = use_proxy
         if proxy_file_path:
-            self.PROXY_FILE_PATH = proxy_file_path
+            self.PROXY_PATH = proxy_file_path
         if proxy_list:
             self.PROXY_LIST = proxy_list
-
+        if max_retries:
+            self.max_retries = max_retries
+        if proxy_protocol:
+            self.PROXY_PROTOCOL = proxy_protocol
+        if remove_proxy:
+            self.REMOVE_PROXY = remove_proxy
         if debug:
             self.DEBUG = debug
             self._configure_logging()
 
     def get_proxy(self):
+        proxy = ''
         if self.PROXY_PATH:
             with open(self.PROXY_PATH, "r") as file:
-                proxy = file.readline().strip()
-                if proxy:
-                    return proxy
-        else:
-            return self.PROXY_LIST[0]
+                new_proxy = file.readline().strip()
+                if new_proxy:
+                    proxy = new_proxy
 
-    def switch_proxy(self, proxy):
+        else:
+            proxy = self.PROXY_LIST[0]
+
+        if self.PROXY_PROTOCOL not in proxy and proxy != '':
+            proxy = self.PROXY_PROTOCOL + '://' + proxy
+
+        return proxy
+
+    async def switch_proxy(self, proxy):
         if self.PROXY_PATH:
+            if self.PROXY_PROTOCOL:
+                proxy = proxy.replace(self.PROXY_PROTOCOL + '://', '')
             with open(self.PROXY_PATH, "r+") as file:
                 proxies = file.readlines()
                 file.seek(0)
                 for line in proxies:
                     if line.strip() != proxy:
                         file.write(line)
-                file.write(proxy + "\n")
+                if not self.REMOVE_PROXY:
+                    file.write(proxy + "\n")
         else:
             self.PROXY_LIST = self.PROXY_LIST[1:] + [self.PROXY_LIST[0]]
 
@@ -88,61 +113,81 @@ class Hltv:
         page = self.f(result)
         challenge_page = page.find(id="challenge-error-title")
         if challenge_page is not None:
-            if "Enable JavaScript and cookies to continue" == challenge_page.get_text():
+            if "Enable JavaScript and cookies to continue" in challenge_page.get_text():
+                self.logger.debug("Got cloudflare challange page")
                 return True
         return False
 
-    async def call_again(self, url, proxy, delay):
+    async def parse_error_handler(self, proxy, delay: int = 0) -> int:
         if self.USE_PROXY:
-            self.logger.info(f"Switching proxy {proxy}")
-            self.switch_proxy(proxy)
-            self.logger.debug(f"New proxy: {self.get_proxy()}")
-            return await self.fetch(url)
+            self.logger.debug(f"Switching proxy {proxy}")
+            await self.switch_proxy(proxy)
+            self.logger.info(f"New proxy: {self.get_proxy()}")
         else:
             if delay < self.MAX_DELAY:
                 delay += 1
             else:
-                self.logger.warning("Reached max delay limit, try to use Proxy")
+                self.logger.debug("Reached max delay limit, try to use proxy")
             self.logger.info(f"Calling again, increasing delay to {delay}s")
-            return await self.fetch(url, delay=delay)
 
-    async def fetch(self, url, delay: int = 0):
+        return delay
+
+    async def parse(self, session, url, delay):
+
         proxy = ''
-        # setup new proxy
+        # setup new proxy, cuz old one was switched
         if self.USE_PROXY:
             proxy = self.get_proxy()
+        else:
+            # delay, only for non proxy users. (default = 1-15s)
+            await asyncio.sleep(delay)
+        try:
+            async with session.get(url, headers=self.headers, proxy=proxy, timeout=self.timeout, ) as response:
+                self.logger.info(f"Fetching {url}, code: {response.status}")
+                if response.status == 403 or response.status == 404:
+                    self.logger.debug("Got 403 forbitten")
+                    return False, self.parse_error_handler(proxy, delay)
 
-        # delay, only for non proxy users. (default = 1-15s)
-        await asyncio.sleep(delay)
+                # checking for challenge page.
+                result = await response.text()
+                if await self.cloudflare_check(result):
+                    return False, self.parse_error_handler(proxy, delay)
+
+                return True, result
+        except (ClientProxyConnectionError, ClientResponseError, ClientOSError,
+                ServerDisconnectedError, TimeoutError, ClientHttpProxyError) as e:
+            delay = await self.parse_error_handler(proxy, delay)
+            return False, delay
+
+    async def fetch(self, url, delay: int = 0):
         async with ClientSession() as session:
-            try:
-                async with session.get(url, headers=self.headers, proxy=proxy, timeout=self.timeout) as response:
-                    self.logger.info(f"Fetching {url}, code: {response.status}")
-                    if response.status == 403 or response.status == 404:
-                        self.logger.debug("Got 403 forbitten")
-                        return await self.call_again(url, proxy, delay)
+            status = False
+            try_ = 1
+            while not status and (try_ != self.max_retries):
+                self.logger.debug(f'Trying connect to {url}, try {try_}/{self.max_retries}')
 
-                    # checking for challenge page.
-                    result = await response.text()
-                    if await self.cloudflare_check(result):
-                        self.logger.debug("Got cloudflare challange page")
-                        return await self.call_again(url, proxy, delay)
+                # if status = True, result = page,
+                # if status = False result = delay (default=0)
+                status, result = await self.parse(session, url, delay)
 
-                    # running executed loop if everything okay
-                    loop = get_running_loop()
-                    parsed = await loop.run_in_executor(None, partial(self.f, result))
-                    return parsed
-            except (ClientProxyConnectionError, ClientResponseError, ClientOSError,
-                    ServerDisconnectedError, TimeoutError, ClientHttpProxyError) as e:
-                self.logger.debug(f"Got 404 ({e}) ({proxy})")
-                return await self.call_again(url, proxy, delay)
+                if not status and result:
+                    delay = result
+                try_ += 1
+
+            if status == True:
+                loop = get_running_loop()
+                parsed = await loop.run_in_executor(None, partial(self.f, result))
+                return parsed
+            else:
+                self.logger.error('Connection failed')
+                return None
 
     def save_error(self, page):
         with open("error.html", "w") as file:
             file.write(page.prettify())
 
-
-    def normalize_date(self, parts) -> str:
+    @staticmethod
+    def normalize_date(parts) -> str:
         month_abbreviations = {
             'Jan': '1', 'Feb': '2', 'Mar': '3', 'Apr': '4',
             'May': '5', 'Jun': '6', 'Jul': '7', 'Aug': '8',
@@ -527,7 +572,8 @@ class Hltv:
 
 
 async def test():
-    hltv = Hltv()
+
+    hltv = Hltv(debug=True, use_proxy=True, proxy_path='proxy_test.txt', timeout=1, remove_proxy=True, proxy_protocol='http')
     print(await hltv.get_event_info(7148, 'pgl-cs2-major-copenhagen-2024'))
 
 if __name__ == "__main__":

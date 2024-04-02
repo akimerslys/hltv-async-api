@@ -240,6 +240,6 @@ test.py
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-!/test.py
 proxies_list.txt
-!/proxies_list.txt
+src/hltv-aio/proxies.txt
+src/hltv-aio/proxy_test.txt
