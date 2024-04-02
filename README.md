@@ -1,4 +1,4 @@
-# Hltv-aio An unofficial asynchronous HLTV API Wrapper for Python
+# hltv-async-api an unofficial asynchronous HLTV API Wrapper for Python
 
 # Features
 
@@ -14,7 +14,7 @@
 # Installation
 
 ```
-pip install hltv-aio
+pip install hltv_async_api
 ```
 
 ---
@@ -23,7 +23,7 @@ pip install hltv-aio
 # Simple Usage
 
 ```
-from hltv-aio import Hltv
+from hltv_async_api import Hltv
 
 hltv = Hltv()
 live_matches = await hltv.get_live_matches()
@@ -67,6 +67,9 @@ hltv = Hltv(use_proxy=True, proxy_list=proxy_list, proxy_protocol='http')
 ****Simple Example****
 
 ```
+from hltv_async_api import Hltv
+
+
 async def test():
 
     hltv = Hltv()
@@ -80,6 +83,9 @@ if __name__ == "__main__":
 
 ****Proxy Parser****
 ```
+from hltv_async_api import Hltv
+
+
 async def test():
 
     hltv = Hltv(debug=True, use_proxy=True, proxy_path='proxy_test.txt', timeout=1, remove_proxy=True, proxy_protocol='http')
