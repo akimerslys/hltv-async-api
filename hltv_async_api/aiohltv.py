@@ -1,5 +1,6 @@
 from typing import Any, List
 from datetime import date, datetime, timedelta
+import pytz
 
 from bs4 import BeautifulSoup
 import asyncio
@@ -578,7 +579,7 @@ class Hltv:
             except AttributeError:
                 pass
 
-            return (team_id, title, rank, players, coach, age, weeks, last_trophy, total_trophys)
+            return team_id, title, rank, players, coach, age, weeks, last_trophy, total_trophys
         except AttributeError:
             raise AttributeError("Parsing error, probably page not fully loaded")
 
@@ -628,18 +629,69 @@ class Hltv:
                 if rank > top:
                     break
         except AttributeError:
-            raise AttributeError("Parsing error, probably page not fully loaded")
+            raise AttributeError("Top players parsing error, probably page not fully loaded")
 
         return players
 
     # TODO WRITE
-    async def get_last_news(self):
-        return []
+    async def get_last_news(self, max_reg_news=2, only_today=True, only_featured=False):
+        r = await self.fetch('https://www.hltv.org/')
+
+        today = datetime.now(tz=pytz.timezone('Europe/Copenhagen'))
+        article_days = {
+            1: today.strftime('%d-%m'),
+            2: (today - timedelta(days=1)).strftime('%d-%m'),
+            3: 'old'
+        }
+
+        news = []
+        reg_news_num = 0
+        for i, news_date_div in enumerate(r.find_all('div', {'class', 'standard-box standard-list'}), start=1):
+            date_ = article_days[i]
+            f_news = []
+            reg_news = []
+            for featured_news_div in news_date_div.find_all('a', {'class': 'newsline article featured breaking-featured'}):
+                featured_id = featured_news_div['href'].split('/')[2]
+                featured_title = featured_news_div.find('div', {'class': 'featured-newstext'}).text
+                featured_description = featured_news_div.find('div', {'class': 'featured-small-newstext'}).text
+                f_news.append({
+                    'f_id': featured_id,
+                    'f_title': featured_title,
+                    'f_desc': featured_description,
+                })
+
+            if not only_featured and reg_news_num < max_reg_news:
+                for news_div in news_date_div.find_all('a',
+                                                           {'class': 'newsline article'}):
+                    if reg_news_num > max_reg_news:
+                        break
+                    if news_div['class'] != 'newsline article featured breaking-featured':
+                        news_id = news_div['href'].split('/')[2]
+                        news_title = news_div.find('div', {'class': 'newstext'}).text
+                        news_posted = news_div.find('div', {'class': 'newsrecent'}).text
+
+                        reg_news.append({
+                            'id': news_id,
+                            'title': news_title,
+                            'posted': news_posted,
+                        })
+                        reg_news_num += 1
+
+            news.append({
+                'date': date_,
+                'f_news': f_news,
+                'news': reg_news,
+            })
+
+            if only_today:
+                break
+
+        return news
 
 
 async def test():
     hltv = Hltv()
-    print(await hltv.get_upcoming_matches())
+    print(await hltv.get_last_news(only_today=True, max_reg_news=1))
 
 
 if __name__ == "__main__":
