@@ -6,11 +6,14 @@
 
 # Features
 
+
+* Simple Usage (its realy simple)
+
+
 * New and modern fully async library
 
-* Supports proxy usage for rate-limiting and privacy
 
-* Automatically changes proxy if access is denied
+* Supports proxy usage with huge amount of options
 
 
 ---
@@ -81,6 +84,14 @@ await hltv.get_upcoming_matches(1, 5)
 >>> ['date': '11/11/2024', 'matches': [team1: 'Natus Vincere' | 'TBD', team2: 'FaZe' | 'TBD', time: '14:15', maps: '3', stars: 5, 'PGL CS2 Major Copenhagen 2024' | None]]```
 
 ```
+* get_events(outgoing=True, future=True, max_events=10) -> [('id', 'title', 'startdate', 'enddate')]
+
+```
+await hltv.get_events(future=False)
+
+>>>[{'id': '7620', 'name': 'ESL Challenger League Season 47 Europe', 'start_date': '26-2', 'end_date': '16-6'}, {'id': '7749', 'name': 'Thunderpick World Championship 2024 EU Closed Qualifier 1', 'start_date': '1-4', 'end_date': '22-4'}]
+
+```
 
 * get_event_results(event_id: int | str)
 
@@ -125,13 +136,22 @@ await hltv.get_team_info(6667, 'faze')
 >>>(6667, 'faze', '1', ['karrigan', 'rain', 'frozen', 'ropz', 'broky'], 'NEO', '26.5', '256', 'CS Asia Championships 2023', 21)
 ```
 
-get_last_news(self, max_reg_news=2, only_today=True, only_featured=False) -> [date, [featured_id, featured_title, featured_desciption], [regular_id, reg_title, reg_time]]
+get_last_news(max_reg_news=2, only_today=True, only_featured=False) -> [date, [featured_id, featured_title, featured_desciption], [regular_id, reg_title, reg_time]]
 
 ```
 await hltv.get_last_news(only_today=True, max_reg_news=1)
 
 >>>[{'date': '02-04', 'f_news': [{'f_id': '38682', 'f_title': 'NIP confirm r1nkle signing', 'f_desc': "Ninjas in Pyjamas only have an anchor player left to sign following the young Ukrainian AWPer's addition."}], 'news': [{'id': '38685', 'title': 'Rounds add sLowi, p3kko', 'posted': 'an hour ago'}, {'id': '38690', 'title': 'n1ssim returns to Sharks after paiN loan deal expires', 'posted': 'an hour ago'}]}]
 ```
+
+get_best_players(top=40) -> ('rank', 'name', 'team', 'maps', 'rating')
+
+```
+await hltv.get_best_players(2)
+
+>>>[{'rank': 1, 'name': 'donk', 'team': 'Spirit', 'maps': '33', 'rating': '1.52'}, {'rank': 2, 'name': 'm0NESY', 'team': 'G2', 'maps': '34', 'rating': '1.38'}]
+```
+
 ---
 # Examples
 
