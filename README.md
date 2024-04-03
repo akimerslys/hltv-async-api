@@ -1,5 +1,9 @@
 # hltv-async-api an unofficial asynchronous HLTV API Wrapper for Python
 
+
+**This page not completed, not all methods and configs are written**
+
+
 # Features
 
 * New and modern fully async library
@@ -48,13 +52,13 @@ hltv = Hltv(use_proxy=True, proxy_path='PATH_TO_PROXY.TXT')
 ```
 
 
-**Remove bad proxy from file**
+**One-time proxy**
 
 ```
-hltv = Hltv(use_proxy=True, proxy_path='PATH_TO_PROXY.TXT', remove_proxy=True)
+hltv = Hltv(use_proxy=True, proxy_path='PATH_TO_PROXY.TXT', proxy_one_time=True)
 ```
 
-**Add proxy protocol**
+**Protocol usage**
 
 ```
 proxy_list = ['120.234.203.171:9002', '110.38.68.38:80']
@@ -64,6 +68,7 @@ hltv = Hltv(use_proxy=True, proxy_list=proxy_list, proxy_protocol='http')
 
 ---
 # Methods
+
 * get_upcoming_matches(days: int = 7, min_star_rating: int = 1)
 
     -days (the number of days into the future to fetch matches for)
@@ -153,7 +158,7 @@ from hltv_async_api import Hltv
 
 async def test():
 
-    hltv = Hltv(debug=True, use_proxy=True, proxy_path='proxy_test.txt', timeout=1, remove_proxy=True, proxy_protocol='http')
+    hltv = Hltv(debug=True, use_proxy=True, proxy_path='proxy_test.txt', timeout=1, proxy_one_time=True, proxy_protocol='http')
     
     print(await hltv.get_event_info(7148, 'pgl-cs2-major-copenhagen-2024'))
 

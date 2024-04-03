@@ -23,7 +23,7 @@ class Hltv:
                  debug: bool = False,
                  max_retries: int = 0,
                  proxy_protocol: str | None = None,
-                 remove_proxy: bool = False
+                 proxy_one_time: bool = False
                  ):
         self.headers = {
             "referer": "https://www.hltv.org/stats",
@@ -37,10 +37,14 @@ class Hltv:
         self.PROXY_PATH = proxy_path
         self.PROXY_LIST = proxy_list
         self.PROXY_PROTOCOL = proxy_protocol
-        self.REMOVE_PROXY = remove_proxy
+        self.PROXY_ONCE = proxy_one_time
         self.DEBUG = debug
         self._configure_logging()
         self.logger = logging.getLogger(__name__)
+
+        if self.PROXY_PATH:
+            with open(self.PROXY_PATH, "r") as file:
+                self.PROXY_LIST = [line.strip() for line in file.readlines()]
 
     def _configure_logging(self):
         level = logging.DEBUG if self.DEBUG else logging.INFO
@@ -54,7 +58,7 @@ class Hltv:
                debug: bool | None = None,
                max_retries: int | None = None,
                proxy_protocol: str | None = None,
-               remove_proxy: bool | None = None,
+               proxy_one_time: bool | None = None,
                ):
         if max_delay:
             self.MAX_DELAY = max_delay
@@ -62,50 +66,37 @@ class Hltv:
             self.timeout = timeout
         if use_proxy:
             self.USE_PROXY = use_proxy
-        if proxy_file_path:
-            self.PROXY_PATH = proxy_file_path
         if proxy_list:
             self.PROXY_LIST = proxy_list
         if max_retries:
             self.max_retries = max_retries
         if proxy_protocol:
             self.PROXY_PROTOCOL = proxy_protocol
-        if remove_proxy:
-            self.REMOVE_PROXY = remove_proxy
+        if proxy_one_time:
+            self.PROXY_ONCE = proxy_one_time
         if debug:
             self.DEBUG = debug
             self._configure_logging()
-
-    def get_proxy(self):
-        proxy = ''
-        if self.PROXY_PATH:
+        if proxy_file_path:
             with open(self.PROXY_PATH, "r") as file:
-                new_proxy = file.readline().strip()
-                if new_proxy:
-                    proxy = new_proxy
+                self.PROXY_LIST = [line.strip() for line in file.readlines()]
 
-        else:
-            proxy = self.PROXY_LIST[0]
+    async def get_proxy(self):
+        proxy = self.PROXY_LIST[0]
 
         if self.PROXY_PROTOCOL and proxy != '' and self.PROXY_PROTOCOL not in proxy:
-       	    proxy = self.PROXY_PROTOCOL + '://' + proxy
+            proxy = self.PROXY_PROTOCOL + '://' + proxy
 
         return proxy
 
-    async def switch_proxy(self, proxy):
-        if self.PROXY_PATH:
-            if self.PROXY_PROTOCOL:
-                proxy = proxy.replace(self.PROXY_PROTOCOL + '://', '')
-            with open(self.PROXY_PATH, "r+") as file:
-                proxies = file.readlines()
-                file.seek(0)
-                for line in proxies:
-                    if line.strip() != proxy:
-                        file.write(line)
-                if not self.REMOVE_PROXY:
-                    file.write(proxy + "\n")
+    async def switch_proxy(self):
+        if self.PROXY_ONCE:
+            self.logger.debug(f'Removing proxy {self.PROXY_LIST[0]}')
+            self.PROXY_LIST = self.PROXY_LIST[1:]
         else:
-            self.PROXY_LIST = self.PROXY_LIST[1:] + [self.PROXY_LIST[0]]
+            self.logger.debug(f"Switching proxy {self.PROXY_LIST[0]}")
+            self.PROXY_LIST = self.PROXY_LIST[1:] + self.PROXY_LIST[0]
+            self.logger.info(f"New proxy: {self.PROXY_LIST[0]}")
 
     def f(self, result):
         return BeautifulSoup(result, "lxml")
@@ -121,9 +112,7 @@ class Hltv:
 
     async def parse_error_handler(self, proxy, delay: int = 0) -> int:
         if self.USE_PROXY:
-            self.logger.debug(f"Switching proxy {proxy}")
-            await self.switch_proxy(proxy)
-            self.logger.info(f"New proxy: {self.get_proxy()}")
+            await self.switch_proxy()
         else:
             if delay < self.MAX_DELAY:
                 delay += 1
@@ -137,7 +126,7 @@ class Hltv:
         proxy = ''
         # setup new proxy, cuz old one was switched
         if self.USE_PROXY:
-            proxy = self.get_proxy()
+            proxy = await self.get_proxy()
         else:
             # delay, only for non proxy users. (default = 1-15s)
             await asyncio.sleep(delay)
@@ -633,7 +622,6 @@ class Hltv:
 
         return players
 
-    # TODO WRITE
     async def get_last_news(self, max_reg_news=2, only_today=True, only_featured=False):
         r = await self.fetch('https://www.hltv.org/')
 
@@ -690,9 +678,9 @@ class Hltv:
 
 
 async def test():
-    hltv = Hltv()
-    print(await hltv.get_last_news(only_today=True, max_reg_news=1))
+    hltv = Hltv(use_proxy=True, proxy_path='proxies.txt', debug=True, one_time_proxy=True, proxy_protocol='http')
 
+    print(await hltv.get_last_news(only_today=True, max_reg_news=1))
 
 if __name__ == "__main__":
     asyncio.run(test())
