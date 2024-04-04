@@ -7,13 +7,13 @@
 # Features
 
 
-* Simple Usage (its realy simple)
+* **Simple Usage** (its realy simple)
 
 
-* New and modern fully async library
+* **New and modern fully async library**
 
 
-* Supports proxy usage with huge amount of options
+* **Supports proxy usage with huge amount of options**
 
 
 ---
@@ -72,7 +72,7 @@ hltv = Hltv(use_proxy=True, proxy_list=proxy_list, proxy_protocol='http')
 ---
 # Methods
 
-* get_upcoming_matches(days: int = 7, min_star_rating: int = 1)
+* **get_upcoming_matches(days: int = 7, min_star_rating: int = 1)**
 
     -days (the number of days into the future to fetch matches for)
   
@@ -84,7 +84,7 @@ await hltv.get_upcoming_matches(1, 5)
 >>> ['date': '11/11/2024', 'matches': [team1: 'Natus Vincere' | 'TBD', team2: 'FaZe' | 'TBD', time: '14:15', maps: '3', stars: 5, 'PGL CS2 Major Copenhagen 2024' | None]]```
 
 ```
-* get_events(outgoing=True, future=True, max_events=10) -> [('id', 'title', 'startdate', 'enddate')]
+* **get_events(outgoing=True, future=True, max_events=10) -> [('id', 'title', 'startdate', 'enddate')]**
 
 ```
 await hltv.get_events(future=False)
@@ -93,7 +93,7 @@ await hltv.get_events(future=False)
 
 ```
 
-* get_event_results(event_id: int | str)
+* **get_event_results(event_id: int | str)**
 
   
 ```
@@ -103,7 +103,7 @@ await get_event_results(7148)
 
 ```
 
-* get_event_matches(event_id: str | int):
+* **get_event_matches(event_id: str | int):**
   
 ```
 await hltv.get_event_matches(7148)
@@ -111,7 +111,7 @@ await hltv.get_event_matches(7148)
 >>>['team1': 'Natus Vincere', 'team2': 'FaZe', 'date': '11-11' | 'LIVE']
 ```
 
-* get_event_info(event_id: str | int, event_title: str) -> (event_id, event_title, event_start, event_end, prize, team_num, location, groups)
+* **get_event_info(event_id: str | int, event_title: str) -> (event_id, event_title, event_start, event_end, prize, team_num, location, groups)**
 
 ```
 await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024')
@@ -120,7 +120,7 @@ await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024')
 ```
 
 
-get_top_teams(max_teams=30) -> ['rank', 'title', 'points', 'change', 'id']
+* **get_top_teams(max_teams=30) -> ['rank', 'title', 'points', 'change', 'id']**
 
 ```
 await hltv.get_top_teams(2)
@@ -128,7 +128,7 @@ await hltv.get_top_teams(2)
 >>>[{'rank': '1', 'title': 'FaZe', 'points': '939', 'change': '-', 'id': '6667'}, {'rank': '2', 'title': 'Natus Vincere', 'points': '757', 'change': '+4', 'id': '4608'}]
 ```
 
-get_team_info(team_id: int | str, title: str) -> (team_id, team_title, rank, [players], coach, average_age, weeks_in_top_20, last_trophy, total_trophys)
+* **get_team_info(team_id: int | str, title: str) -> (team_id, team_title, rank, [players], coach, average_age, weeks_in_top_20, last_trophy, total_trophys)**
 
 ```
 await hltv.get_team_info(6667, 'faze')
@@ -136,7 +136,7 @@ await hltv.get_team_info(6667, 'faze')
 >>>(6667, 'faze', '1', ['karrigan', 'rain', 'frozen', 'ropz', 'broky'], 'NEO', '26.5', '256', 'CS Asia Championships 2023', 21)
 ```
 
-get_last_news(max_reg_news=2, only_today=True, only_featured=False) -> [date, [featured_id, featured_title, featured_desciption], [regular_id, reg_title, reg_time]]
+* **get_last_news(max_reg_news=2, only_today=True, only_featured=False) -> [date, [featured_id, featured_title, featured_desciption], [regular_id, reg_title, reg_time]]**
 
 ```
 await hltv.get_last_news(only_today=True, max_reg_news=1)
@@ -144,7 +144,7 @@ await hltv.get_last_news(only_today=True, max_reg_news=1)
 >>>[{'date': '02-04', 'f_news': [{'f_id': '38682', 'f_title': 'NIP confirm r1nkle signing', 'f_desc': "Ninjas in Pyjamas only have an anchor player left to sign following the young Ukrainian AWPer's addition."}], 'news': [{'id': '38685', 'title': 'Rounds add sLowi, p3kko', 'posted': 'an hour ago'}, {'id': '38690', 'title': 'n1ssim returns to Sharks after paiN loan deal expires', 'posted': 'an hour ago'}]}]
 ```
 
-get_best_players(top=40) -> ('rank', 'name', 'team', 'maps', 'rating')
+* **get_best_players(top=40) -> ('rank', 'name', 'team', 'maps', 'rating')**
 
 ```
 await hltv.get_best_players(2)
