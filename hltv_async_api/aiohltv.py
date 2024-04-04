@@ -10,6 +10,8 @@ from functools import partial
 from aiohttp import ClientSession, ClientTimeout
 from aiohttp.client_exceptions import ClientProxyConnectionError, ClientResponseError, ClientOSError, \
     ServerDisconnectedError, ClientHttpProxyError
+import re
+
 
 import logging
 
@@ -46,9 +48,20 @@ class Hltv:
             with open(self.PROXY_PATH, "r") as file:
                 self.PROXY_LIST = [line.strip() for line in file.readlines()]
 
+        self.session = None
+
     def _configure_logging(self):
         level = logging.DEBUG if self.DEBUG else logging.INFO
         logging.basicConfig(level=level, format="%(message)s")
+
+    async def _create_session(self):
+        self.logger.debug('Creating Session')
+        self.session = ClientSession()
+
+    async def close_session(self):
+        if self.session:
+            self.logger.debug('Closing Session')
+            await self.session.close()
 
     def config(self, max_delay: int | None = None,
                timeout: int | None = None,
@@ -81,7 +94,7 @@ class Hltv:
             with open(self.PROXY_PATH, "r") as file:
                 self.PROXY_LIST = [line.strip() for line in file.readlines()]
 
-    async def get_proxy(self):
+    async def _get_proxy(self):
         proxy = self.PROXY_LIST[0]
 
         if self.PROXY_PROTOCOL and proxy != '' and self.PROXY_PROTOCOL not in proxy:
@@ -89,7 +102,7 @@ class Hltv:
 
         return proxy
 
-    async def switch_proxy(self):
+    async def _switch_proxy(self):
         if self.PROXY_ONCE:
             self.logger.debug(f'Removing proxy {self.PROXY_LIST[0]}')
             self.PROXY_LIST = self.PROXY_LIST[1:]
@@ -98,11 +111,11 @@ class Hltv:
             self.PROXY_LIST = self.PROXY_LIST[1:] + self.PROXY_LIST[0]
             self.logger.info(f"New proxy: {self.PROXY_LIST[0]}")
 
-    def f(self, result):
+    def _f(self, result):
         return BeautifulSoup(result, "lxml")
 
-    async def cloudflare_check(self, result) -> bool:
-        page = self.f(result)
+    async def _cloudflare_check(self, result) -> bool:
+        page = self._f(result)
         challenge_page = page.find(id="challenge-error-title")
         if challenge_page is not None:
             if "Enable JavaScript and cookies to continue" in challenge_page.get_text():
@@ -110,9 +123,9 @@ class Hltv:
                 return True
         return False
 
-    async def parse_error_handler(self, proxy, delay: int = 0) -> int:
+    async def _parse_error_handler(self, delay: int = 0) -> int:
         if self.USE_PROXY:
-            await self.switch_proxy()
+            await self._switch_proxy()
         else:
             if delay < self.MAX_DELAY:
                 delay += 1
@@ -122,61 +135,63 @@ class Hltv:
 
         return delay
 
-    async def parse(self, session, url, delay):
+    async def _parse(self, url, delay):
         proxy = ''
         # setup new proxy, cuz old one was switched
         if self.USE_PROXY:
-            proxy = await self.get_proxy()
+            proxy = await self._get_proxy()
         else:
             # delay, only for non proxy users. (default = 1-15s)
             await asyncio.sleep(delay)
         try:
-            async with session.get(url, headers=self.headers, proxy=proxy, timeout=self.timeout, ) as response:
+            async with self.session.get(url, headers=self.headers, proxy=proxy, timeout=self.timeout, ) as response:
                 self.logger.info(f"Fetching {url}, code: {response.status}")
                 if response.status == 403 or response.status == 404:
                     self.logger.debug("Got 403 forbitten")
-                    return False, await self.parse_error_handler(proxy, delay)
+                    return False, await self._parse_error_handler(delay)
 
                 # checking for challenge page.
                 result = await response.text()
-                if await self.cloudflare_check(result):
-                    return False, await self.parse_error_handler(proxy, delay)
+                if await self._cloudflare_check(result):
+                    return False, await self._parse_error_handler(delay)
 
                 return True, result
         except (ClientProxyConnectionError, ClientResponseError, ClientOSError,
                 ServerDisconnectedError, TimeoutError, ClientHttpProxyError) as e:
-            delay = await self.parse_error_handler(proxy, delay)
+            delay = await self._parse_error_handler(delay)
             return False, delay
 
-    async def fetch(self, url, delay: int = 0):
-        async with ClientSession() as session:
-            status = False
-            try_ = 1
-            while not status and (try_ != self.max_retries):
-                self.logger.debug(f'Trying connect to {url}, try {try_}/{self.max_retries}')
+    async def _fetch(self, url, delay: int = 0):
+        if not self.session:
+            await self._create_session()
 
-                # if status = True, result = page,
-                # if status = False result = delay (default=0)
-                status, result = await self.parse(session, url, delay)
+        status = False
+        try_ = 1
+        while not status and (try_ != self.max_retries):
+            self.logger.debug(f'Trying connect to {url}, try {try_}/{self.max_retries}')
 
-                if not status and result:
-                    delay = result
-                try_ += 1
+            # if status = True, result = page,
+            # if status = False result = delay (default=0)
+            status, result = await self._parse(url, delay)
 
-            if status == True:
-                loop = get_running_loop()
-                parsed = await loop.run_in_executor(None, partial(self.f, result))
-                return parsed
-            else:
-                self.logger.error('Connection failed')
-                return None
+            if not status and result:
+                delay = result
+            try_ += 1
+
+        if status == True:
+            loop = get_running_loop()
+            parsed = await loop.run_in_executor(None, partial(self._f, result))
+            return parsed
+        else:
+            self.logger.error('Connection failed')
+            return None
 
     def save_error(self, page):
         with open("error.html", "w") as file:
             file.write(page.prettify())
 
     @staticmethod
-    def normalize_date(parts) -> str:
+    def _normalize_date(parts) -> str:
         month_abbreviations = {
             'Jan': '1', 'Feb': '2', 'Mar': '3', 'Apr': '4',
             'May': '5', 'Jun': '6', 'Jul': '7', 'Aug': '8',
@@ -186,9 +201,10 @@ class Hltv:
         day = parts[1][:-2]
         return day + '-' + month
 
+    # TODO rewrite
     async def get_live_matches(self):
         """returns a list of all LIVE matches on HLTV along with the maps being played and the star ratings"""
-        r = await self.fetch("https://www.hltv.org/matches")
+        r = await self._fetch("https://www.hltv.org/matches")
         if not r:
             return
 
@@ -203,9 +219,9 @@ class Hltv:
             stars = [line.get('stars') for line in liveMatchContainer]
             return [{'teams': teams, 'maps': maps, 'stars': stars} for teams, maps, stars in zip(matches, maps, stars)]
 
-    async def get_upcoming_matches(self, days: int = 7, star_rating: int = 1):
+    async def get_upcoming_matches(self, days: int = 7, min_rating: int = 1):
         """returns a list of all upcoming matches on HLTV"""
-        r = await self.fetch("https://www.hltv.org/matches")
+        r = await self._fetch("https://www.hltv.org/matches")
         if not r:return
 
         matches = []
@@ -221,7 +237,9 @@ class Hltv:
                 for match in date_div.find_all('div', {'class': 'upcomingMatch'}):
                     time_ = match.find('div', {'class': 'matchTime'}).text
                     rating = int(match['stars'])
-                    if rating >= star_rating:
+                    if rating >= min_rating:
+                        match_id_ = match.find('a')['href'].split('/')[2]
+
                         maps = match.find('div', {'class': 'matchMeta'}).text[-1:]
                         try:
                             teams = match.find_all('div', {'class': 'matchTeamName text-ellipsis'})
@@ -242,6 +260,7 @@ class Hltv:
                                 event = ''
 
                         matches_today.append({
+                            'match_id': match_id_,
                             'team1': team1,
                             'team2': team2,
                             'time': time_,
@@ -258,27 +277,62 @@ class Hltv:
             return None
         return matches
 
-    async def get_important_upcoming_matches(self, star_rating=1):
-        """returns a list of all upcoming matches on HLTV with the star rating argument (should be between 0 and 5)"""
-        r = await self.fetch("https://www.hltv.org/matches")
-        if not r:
-            return
 
-        teams = [line.getText() for line in r.find("div",
-                                                   {'class', "upcomingMatchesContainer"}).find_all(
-            class_=lambda v: v is not None and (v == "team text-ellipsis" or v == "matchTeamName text-ellipsis"))]
-        stars = [int(line.get('stars')) for line in r.find("div",
-                                                           {'class', "upcomingMatchesContainer"}).find_all("div",
-                                                                                                           {"class",
-                                                                                                            "upcomingMatch "})
-                 if line.get('team1') is not None]
-        matches = [(team1, team2) for team1, team2 in tuple(zip(teams, teams[1:]))[::2]]
-        # assert len(matches) == len(stars), "Internal Exception :: get_important_upcoming_matches() :: misMatches detected"
-        return [match for match, star in zip(matches, stars) if star == star_rating]
+    async def get_match_info(self, match_id: str, team1: str, team2: str, event_title: str, stats: bool = True):
+        r = await self._fetch(f"https://www.hltv.org/matches/{match_id}/"
+                             f"{team1.replace(' ', '-')}-vs-"
+                             f"{team2.replace(' ', '-')}-"
+                             f"{event_title.replace(' ', '-')}")
+
+
+        status = r.find('div', {'class': 'countdown'}).text
+
+        score1, score2 = 0, 0
+
+        if status == 'Match over':
+            scores = r.find_all('div', class_='team')
+            score1 = scores[0].get_text().replace('\n', '')[-1]
+            score2 = scores[1].get_text().replace('\n', '')[-1]
+
+
+        maps = []
+        for map_div in r.find_all('div', {'class': 'mapholder'}):
+
+                mapname = map_div.find('div', {'class': 'mapname'}).text
+                try:
+                    r_teams = map_div.find_all('div', {'class': 'results-team-score'})
+                    r_team1 = r_teams[0].text
+                    r_team2 = r_teams[1].text
+                except AttributeError:
+                    r_team1 = '0'
+                    r_team2 = '0'
+                maps.append({'mapname': mapname, 'r_team1': r_team1, 'r_team2': r_team2})
+
+        stats_ = []
+        if stats and status == 'Match over':
+            for table_div in r.find_all('table', {'class': 'table totalstats'})[:2]:
+                for player in table_div.find_all('tr')[1:]:
+                    player_id = player.find('a', class_='flagAlign')['href'].split('/')[2]
+                    player_name = player.find('div', class_='statsPlayerName').text.strip()
+                    nickname = re.findall(r"'(.*?)'", player_name)[0]
+
+                    kd = player.find('td', class_='kd').text.strip()
+                    adr = player.find('td', class_='adr').text.strip()
+                    rating = player.find('td', class_='rating').text.strip()
+                    stats_.append({
+                        'id': player_id,
+                        'name': nickname,
+                        'kd': kd,
+                        'adr': adr,
+                        'rating': rating
+                    })
+
+        return match_id, score1, score2, status, maps, stats
+
 
     async def get_big_results(self, offset=0) -> list[dict[str, Any]] | None:
-        """returns a list of results from past 100 matches on HLTV starting from the offset param"""
-        r = await self.fetch("https://www.hltv.org/results?offset=" + str(offset))
+        """returns a list of big event matches results"""
+        r = await self._fetch("https://www.hltv.org/results?offset=" + str(offset))
         if not r:
             return
 
@@ -304,7 +358,7 @@ class Hltv:
         return big_results
 
     async def get_event_results(self, event: int | str) -> list[dict[str, Any]] | None:
-        r = await self.fetch("https://www.hltv.org/results?event=" + str(event))
+        r = await self._fetch("https://www.hltv.org/results?event=" + str(event))
         if not r:
             return
 
@@ -312,9 +366,9 @@ class Hltv:
 
         for result in r.find("div", {'class', 'results-holder'}).find_all("div", {'class', 'results-sublist'}):
             date = result.find("span", class_="standard-headline").text.strip()
-            matches = result.find_all("div", class_="result-con")
-
-            for match in matches:
+            match_date = []
+            for match in result.find_all("a", class_="a-reset"):
+                id_ = match['href'].split('/')[2]
                 teams = match.find_all("div", class_="team")
                 team1 = teams[0].text.strip()
                 team2 = teams[1].text.strip()
@@ -323,18 +377,21 @@ class Hltv:
                 score_t1 = scores[0].strip()
                 score_t2 = scores[1].strip()
 
-                match_results.append({
-                    'date': date,
+                match_date.append({
+                    'id': id_,
                     'team1': team1,
                     'team2': team2,
                     'score1': score_t1,
                     'score2': score_t2,
                 })
-
+            match_results.append({
+                'date': date,
+                'matches': match_date,
+            })
         return match_results
 
     async def get_event_matches(self, event_id: str | int):
-        r = await self.fetch("https://www.hltv.org/events/" + str(event_id) + "/matches")
+        r = await self._fetch("https://www.hltv.org/events/" + str(event_id) + "/matches")
         if not r:
             return
 
@@ -344,8 +401,9 @@ class Hltv:
             live_matches = r.find("div", {'class', 'liveMatchesSection'}).find_all("div", {'class', 'liveMatch'})
         except AttributeError:
             live_matches = []
-
+        live_mat = []
         for live in live_matches:
+            id_ = live.find('a', {'class': 'match a-reset'})['href'].split('/')[2]
             teams = live.find_all("div", class_="matchTeamName text-ellipsis")
             team1 = teams[0].text.strip()
             team2 = teams[1].text.strip()
@@ -359,24 +417,30 @@ class Hltv:
                 score_team1 = 0
                 score_team2 = 0
 
-            matches.append({
+            live_mat.append({
+                'id': id_,
                 'team1': team1,
                 'team2': team2,
-                'date': 'LIVE'
             })
+
+        matches.append({
+            'date': 'LIVE',
+            'matches': live_mat,
+        })
 
         for date_sect in r.find_all('div', {'class': 'upcomingMatchesSection'}):
             date_ = date_sect.find('span', {'class': 'matchDayHeadline'}).text.split(' ')[-1]
-            for match in date_sect.find_all('div', {'class': 'upcomingMatch'}):
+            for match in date_sect.find_all('div', {'class': 'match a-reset'}):
                 teams = match.find_all("div", class_="matchTeamName text-ellipsis")
                 if teams or len(teams) > 1:
-
+                    id_ = match['href'].split('/')[2]
                     team1 = teams[0].text.strip()
                     team2 = teams[1].text.strip()
 
                     time_ = match.find('div', {'class', 'matchTime'}).text
 
                     matches.append({
+                        'id': id_,
                         'team1': team1,
                         'team2': team2,
                         'date': date_ + " " + time_
@@ -396,7 +460,7 @@ class Hltv:
         [('id', 'title', 'startdate', 'enddate')]
         """
 
-        r = await self.fetch('https://www.hltv.org/events')
+        r = await self._fetch('https://www.hltv.org/events')
         if not r:
             return
 
@@ -405,10 +469,10 @@ class Hltv:
             for event in r.find('div', {'class': 'tab-content', 'id': 'TODAY'}).find_all('a', {
                                 'class': 'a-reset ongoing-event'}):
                 event_name = event.find('div', {'class': 'text-ellipsis'}).text.strip()
-                event_start_date = self.normalize_date(
+                event_start_date = self._normalize_date(
                     event.find('span', {'data-time-format': 'MMM do'}).text.strip().split())
 
-                event_end_date = self.normalize_date(
+                event_end_date = self._normalize_date(
                     event.find_all('span', {'data-time-format': 'MMM do'})[1].text.strip().split())
                 event_id = event['href'].split('/')[-2]
 
@@ -429,8 +493,8 @@ class Hltv:
                     event_id = event['href'].split('/')[-2]
                     event_name = event.find('div', {'class': 'big-event-name'}).text.strip()
                     # event_location = event.find('span', {'class': 'big-event-location'}).text.strip()
-                    event_start_date = self.normalize_date(event.find('span', {'class': ''}).text.strip().split())
-                    event_end_date = self.normalize_date(event.find('span', {'class': ''}).text.strip().split())
+                    event_start_date = self._normalize_date(event.find('span', {'class': ''}).text.strip().split())
+                    event_end_date = self._normalize_date(event.find('span', {'class': ''}).text.strip().split())
 
                     events.append({
                         'id': event_id,
@@ -442,14 +506,14 @@ class Hltv:
         return events
 
     async def get_event_info(self, event_id: str | int, event_title: str):
-        r = await self.fetch(f"https://www.hltv.org/events/{str(event_id)}/{event_title.replace(' ', '-')}")
+        r = await self._fetch(f"https://www.hltv.org/events/{str(event_id)}/{event_title.replace(' ', '-')}")
         if not r:
             return
 
         event_date_div = r.find('td', {'class', 'eventdate'}).find_all('span')
 
-        event_start = self.normalize_date(event_date_div[0].text.split())
-        event_end = self.normalize_date(event_date_div[1].text.split()[1:-1])
+        event_start = self._normalize_date(event_date_div[0].text.split())
+        event_end = self._normalize_date(event_date_div[1].text.split()[1:-1])
 
         prize = r.find('td', {'class', 'prizepool text-ellipsis'}).text
 
@@ -486,7 +550,7 @@ class Hltv:
 
         teams = []
 
-        r = await self.fetch("https://www.hltv.org/ranking/teams/" + last_monday.strftime('%Y/%B/%d').lower())
+        r = await self._fetch("https://www.hltv.org/ranking/teams/" + last_monday.strftime('%Y/%B/%d').lower())
 
         if not r:
             return
@@ -506,7 +570,7 @@ class Hltv:
                 title = title_div.find('span', {'class': 'name'}).text
                 points = title_div.find('span', {'class': 'points'}).text.split(' ', 1)[0][1:]
 
-                id = team.find('a', {'class': 'details moreLink'})['href'].split('/')[-1]
+                id_ = team.find('a', {'class': 'details moreLink'})['href'].split('/')[-1]
 
                 changes = {'change positive', 'change neutral', 'change negative'}
                 change = ''
@@ -518,11 +582,11 @@ class Hltv:
                         pass
 
                 teams.append({
+                    'id': id_,
                     'rank': rank,
                     'title': title,
                     'points': points,
                     'change': change,
-                    'id': id
                 })
         except AttributeError:
             raise AttributeError("Parsing error, probably page not fully loaded")
@@ -539,7 +603,7 @@ class Hltv:
         (team_id, title, rank, players, coach, age, weeks, last_trophy, total_trophys) | None
         weeks - weeks in top 20
         """
-        r = await self.fetch("https://www.hltv.org/team/" + str(team_id) + '/' + title.replace(' ', '-'))
+        r = await self._fetch("https://www.hltv.org/team/" + str(team_id) + '/' + title.replace(' ', '-'))
         players = []
         try:
             for player in r.find_all('span', {'class': 'text-ellipsis bold'}):
@@ -582,7 +646,7 @@ class Hltv:
         maps - maps played
         """
         year = datetime.strftime(datetime.utcnow(), '%Y')
-        r = await self.fetch(
+        r = await self._fetch(
             f"https://www.hltv.org/stats/players?startDate={year}-01-01&endDate={year}-12-31&rankingFilter=Top20")
 
         if not r:
@@ -592,7 +656,9 @@ class Hltv:
         rank = 1
         try:
             for player in r.find('tbody').find_all('tr'):
-                name = player.find('td', {'class', 'playerCol'}).find('a').text
+                name_div = player.find('td', {'class', 'playerCol'}).find('a')
+                id_ = name_div['href'].split('/')[3]
+                name = name_div.text
                 team = player.find('td', {'class', 'teamCol'})['data-sort']
 
                 maps = player.find('td', {'class', 'statsDetail'}).text
@@ -608,6 +674,7 @@ class Hltv:
                         pass
 
                 players.append({
+                    'id': id_,
                     'rank': rank,
                     'name': name,
                     'team': team,
@@ -623,7 +690,7 @@ class Hltv:
         return players
 
     async def get_last_news(self, max_reg_news=2, only_today=True, only_featured=False):
-        r = await self.fetch('https://www.hltv.org/')
+        r = await self._fetch('https://www.hltv.org/')
 
         today = datetime.now(tz=pytz.timezone('Europe/Copenhagen'))
         article_days = {
@@ -678,9 +745,9 @@ class Hltv:
 
 
 async def test():
-    hltv = Hltv(use_proxy=True, proxy_path='proxies.txt', debug=True, one_time_proxy=True, proxy_protocol='http')
-
-    print(await hltv.get_last_news(only_today=True, max_reg_news=1))
+    #hltv = Hltv(use_proxy=True, proxy_path='proxies.txt', debug=True, proxy_one_time=True, proxy_protocol='http')
+    hltv = Hltv()
+    print(await hltv.get_match_info('2370727', 'faze', 'natus-vincere', 'pgl-cs2-major-copenhagen-2024'))
 
 if __name__ == "__main__":
     asyncio.run(test())

@@ -78,7 +78,7 @@ hltv = Hltv(use_proxy=True, proxy_list=proxy_list, proxy_protocol='http')
 ```
 await hltv.get_upcoming_matches(1, 5)
 
->>> ['date': '11/11/2024', 'matches': [team1: 'Natus Vincere' | 'TBD', team2: 'FaZe' | 'TBD', time: '14:15', maps: '3', stars: 5, 'PGL CS2 Major Copenhagen 2024' | None]]```
+>>> ['date': '11/11/2024', 'matches': [id: '1111', team1: 'Natus Vincere' | 'TBD', team2: 'FaZe' | 'TBD', time: '14:15', maps: '3', stars: 5, 'PGL CS2 Major Copenhagen 2024' | None]]```
 
 ```
 
@@ -88,7 +88,7 @@ await hltv.get_upcoming_matches(1, 5)
 ```
 await get_event_results(7148)
 
->>> ['date': '31-3', 'team1': 'FaZe', 'team2': 'Natus Vincere', 'score1': '1', 'score2': '2']
+>>> ['date': '31-3', 'matches': ['id': '1111', team1': 'FaZe', 'team2': 'Natus Vincere', 'score1': '1', 'score2': '2']]
 
 ```
 
@@ -97,7 +97,7 @@ await get_event_results(7148)
 ```
 await hltv.get_event_matches(7148)
 
->>>['team1': 'Natus Vincere', 'team2': 'FaZe', 'date': '11-11' | 'LIVE']
+>>>['date': '1-1' | 'LIVE, 'matches': ['id': '1111', team1': 'Natus Vincere', 'team2': 'FaZe']
 ```
 
 * get_event_info(event_id: str | int, event_title: str) -> (event_id, event_title, event_start, event_end, prize, team_num, location, groups)
@@ -114,7 +114,7 @@ get_top_teams(max_teams=30) -> ['rank', 'title', 'points', 'change', 'id']
 ```
 await hltv.get_top_teams(2)
 
->>>[{'rank': '1', 'title': 'FaZe', 'points': '939', 'change': '-', 'id': '6667'}, {'rank': '2', 'title': 'Natus Vincere', 'points': '757', 'change': '+4', 'id': '4608'}]
+>>>[{'id': '1111', 'rank': '1', 'title': 'FaZe', 'points': '939', 'change': '-', 'id': '6667'}, {'id': '1111', 'rank': '2', 'title': 'Natus Vincere', 'points': '757', 'change': '+4', 'id': '4608'}]
 ```
 
 get_team_info(team_id: int | str, title: str) -> (team_id, team_title, rank, [players], coach, average_age, weeks_in_top_20, last_trophy, total_trophys)
