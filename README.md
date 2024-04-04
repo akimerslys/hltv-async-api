@@ -81,7 +81,7 @@ hltv = Hltv(use_proxy=True, proxy_list=proxy_list, proxy_protocol='http')
 ```
 await hltv.get_upcoming_matches(1, 5)
 
->>> ['date': '11/11/2024', 'matches': [id: '1111', team1: 'Natus Vincere' | 'TBD', team2: 'FaZe' | 'TBD', time: '14:15', maps: '3', stars: 5, 'PGL CS2 Major Copenhagen 2024' | None]]```
+>>> ['date': '11-11', 'matches': [id: '1111', team1: 'Natus Vincere' | 'TBD', team2: 'FaZe' | 'TBD', time: '14:15', maps: '3', stars: 5, 'PGL CS2 Major Copenhagen 2024' | None]]```
 
 ```
 * **get_events(outgoing=True, future=True, max_events=10) -> [('id', 'title', 'startdate', 'enddate')]**
