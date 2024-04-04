@@ -25,7 +25,8 @@ class Hltv:
                  debug: bool = False,
                  max_retries: int = 0,
                  proxy_protocol: str | None = None,
-                 proxy_one_time: bool = False
+                 proxy_one_time: bool = False,
+                 true_session: bool = False,
                  ):
         self.headers = {
             "referer": "https://www.hltv.org/stats",
@@ -48,6 +49,7 @@ class Hltv:
             with open(self.PROXY_PATH, "r") as file:
                 self.PROXY_LIST = [line.strip() for line in file.readlines()]
 
+        self.TRUE_SESSION = true_session
         self.session = None
 
     def _configure_logging(self):
@@ -72,12 +74,13 @@ class Hltv:
                max_retries: int | None = None,
                proxy_protocol: str | None = None,
                proxy_one_time: bool | None = None,
+               true_session: bool | None = None,
                ):
         if max_delay:
             self.MAX_DELAY = max_delay
         if timeout:
             self.timeout = timeout
-        if use_proxy:
+        if use_proxy is not None:
             self.USE_PROXY = use_proxy
         if proxy_list:
             self.PROXY_LIST = proxy_list
@@ -85,9 +88,11 @@ class Hltv:
             self.max_retries = max_retries
         if proxy_protocol:
             self.PROXY_PROTOCOL = proxy_protocol
-        if proxy_one_time:
+        if proxy_one_time is not None:
             self.PROXY_ONCE = proxy_one_time
-        if debug:
+        if true_session is not None:
+            self.TRUE_SESSION = true_session
+        if debug is not None:
             self.DEBUG = debug
             self._configure_logging()
         if proxy_file_path:
@@ -107,9 +112,9 @@ class Hltv:
             self.logger.debug(f'Removing proxy {self.PROXY_LIST[0]}')
             self.PROXY_LIST = self.PROXY_LIST[1:]
         else:
-            self.logger.debug(f"Switching proxy {self.PROXY_LIST[0]}")
-            self.PROXY_LIST = self.PROXY_LIST[1:] + self.PROXY_LIST[0]
-            self.logger.info(f"New proxy: {self.PROXY_LIST[0]}")
+            self.logger.debug(f"Switching proxy {self.PROXY_LIST[0] if self.PROXY_LIST[0] else 'No Proxy'}")
+            self.PROXY_LIST = self.PROXY_LIST[1:] + [(self.PROXY_LIST[0])]
+            self.logger.info(f"New proxy: {self.PROXY_LIST[0] if self.PROXY_LIST[0] else 'No Proxy'}")
 
     def _f(self, result):
         return BeautifulSoup(result, "lxml")
@@ -119,7 +124,7 @@ class Hltv:
         challenge_page = page.find(id="challenge-error-title")
         if challenge_page is not None:
             if "Enable JavaScript and cookies to continue" in challenge_page.get_text():
-                self.logger.debug("Got cloudflare challange page")
+                self.logger.debug("Got cloudflare challenge page")
                 return True
         return False
 
@@ -167,6 +172,7 @@ class Hltv:
 
         status = False
         try_ = 1
+        result = None
         while not status and (try_ != self.max_retries):
             self.logger.debug(f'Trying connect to {url}, try {try_}/{self.max_retries}')
 
@@ -178,7 +184,12 @@ class Hltv:
                 delay = result
             try_ += 1
 
-        if status == True:
+        # After Parse
+        if not self.TRUE_SESSION:
+            # Automaticaly close session after parse
+            await self.close_session()
+
+        if status:
             loop = get_running_loop()
             parsed = await loop.run_in_executor(None, partial(self._f, result))
             return parsed
@@ -745,8 +756,7 @@ class Hltv:
 
 
 async def test():
-    #hltv = Hltv(use_proxy=True, proxy_path='proxies.txt', debug=True, proxy_one_time=True, proxy_protocol='http')
-    hltv = Hltv()
+    hltv = Hltv(debug=True)
     print(await hltv.get_match_info('2370727', 'faze', 'natus-vincere', 'pgl-cs2-major-copenhagen-2024'))
 
 if __name__ == "__main__":
