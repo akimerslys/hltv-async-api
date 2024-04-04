@@ -6,11 +6,14 @@
 
 # Features
 
-* New and modern fully async library
 
-* Supports proxy usage for rate-limiting and privacy
+* **Simple Usage** (its realy simple)
 
-* Automatically changes proxy if access is denied
+
+* **New and modern fully async library**
+
+
+* **Supports proxy usage with huge amount of options**
 
 
 ---
@@ -69,7 +72,7 @@ hltv = Hltv(use_proxy=True, proxy_list=proxy_list, proxy_protocol='http')
 ---
 # Methods
 
-* get_upcoming_matches(days: int = 7, min_star_rating: int = 1)
+* **get_upcoming_matches(days: int = 7, min_star_rating: int = 1)**
 
     -days (the number of days into the future to fetch matches for)
   
@@ -81,8 +84,16 @@ await hltv.get_upcoming_matches(1, 5)
 >>> ['date': '11/11/2024', 'matches': [id: '1111', team1: 'Natus Vincere' | 'TBD', team2: 'FaZe' | 'TBD', time: '14:15', maps: '3', stars: 5, 'PGL CS2 Major Copenhagen 2024' | None]]```
 
 ```
+* **get_events(outgoing=True, future=True, max_events=10) -> [('id', 'title', 'startdate', 'enddate')]**
 
-* get_event_results(event_id: int | str)
+```
+await hltv.get_events(future=False)
+
+>>>[{'id': '7620', 'name': 'ESL Challenger League Season 47 Europe', 'start_date': '26-2', 'end_date': '16-6'}, {'id': '7749', 'name': 'Thunderpick World Championship 2024 EU Closed Qualifier 1', 'start_date': '1-4', 'end_date': '22-4'}]
+
+```
+
+* **get_event_results(event_id: int | str)**
 
   
 ```
@@ -92,7 +103,7 @@ await get_event_results(7148)
 
 ```
 
-* get_event_matches(event_id: str | int):
+* **get_event_matches(event_id: str | int):**
   
 ```
 await hltv.get_event_matches(7148)
@@ -100,7 +111,7 @@ await hltv.get_event_matches(7148)
 >>>['date': '1-1' | 'LIVE, 'matches': ['id': '1111', team1': 'Natus Vincere', 'team2': 'FaZe']
 ```
 
-* get_event_info(event_id: str | int, event_title: str) -> (event_id, event_title, event_start, event_end, prize, team_num, location, groups)
+* **get_event_info(event_id: str | int, event_title: str) -> (event_id, event_title, event_start, event_end, prize, team_num, location, groups)**
 
 ```
 await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024')
@@ -109,7 +120,7 @@ await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024')
 ```
 
 
-get_top_teams(max_teams=30) -> ['rank', 'title', 'points', 'change', 'id']
+* **get_top_teams(max_teams=30) -> ['rank', 'title', 'points', 'change', 'id']**
 
 ```
 await hltv.get_top_teams(2)
@@ -117,7 +128,7 @@ await hltv.get_top_teams(2)
 >>>[{'id': '1111', 'rank': '1', 'title': 'FaZe', 'points': '939', 'change': '-', 'id': '6667'}, {'id': '1111', 'rank': '2', 'title': 'Natus Vincere', 'points': '757', 'change': '+4', 'id': '4608'}]
 ```
 
-get_team_info(team_id: int | str, title: str) -> (team_id, team_title, rank, [players], coach, average_age, weeks_in_top_20, last_trophy, total_trophys)
+* **get_team_info(team_id: int | str, title: str) -> (team_id, team_title, rank, [players], coach, average_age, weeks_in_top_20, last_trophy, total_trophys)**
 
 ```
 await hltv.get_team_info(6667, 'faze')
@@ -125,13 +136,22 @@ await hltv.get_team_info(6667, 'faze')
 >>>(6667, 'faze', '1', ['karrigan', 'rain', 'frozen', 'ropz', 'broky'], 'NEO', '26.5', '256', 'CS Asia Championships 2023', 21)
 ```
 
-get_last_news(self, max_reg_news=2, only_today=True, only_featured=False) -> [date, [featured_id, featured_title, featured_desciption], [regular_id, reg_title, reg_time]]
+* **get_last_news(max_reg_news=2, only_today=True, only_featured=False) -> [date, [featured_id, featured_title, featured_desciption], [regular_id, reg_title, reg_time]]**
 
 ```
 await hltv.get_last_news(only_today=True, max_reg_news=1)
 
 >>>[{'date': '02-04', 'f_news': [{'f_id': '38682', 'f_title': 'NIP confirm r1nkle signing', 'f_desc': "Ninjas in Pyjamas only have an anchor player left to sign following the young Ukrainian AWPer's addition."}], 'news': [{'id': '38685', 'title': 'Rounds add sLowi, p3kko', 'posted': 'an hour ago'}, {'id': '38690', 'title': 'n1ssim returns to Sharks after paiN loan deal expires', 'posted': 'an hour ago'}]}]
 ```
+
+* **get_best_players(top=40) -> ('rank', 'name', 'team', 'maps', 'rating')**
+
+```
+await hltv.get_best_players(2)
+
+>>>[{'rank': 1, 'name': 'donk', 'team': 'Spirit', 'maps': '33', 'rating': '1.52'}, {'rank': 2, 'name': 'm0NESY', 'team': 'G2', 'maps': '34', 'rating': '1.38'}]
+```
+
 ---
 # Examples
 
