@@ -89,7 +89,7 @@ pip install hltv-async-api
     ```
     await hltv.get_events(future=False)
     
-    >>>[{'id': '7620', 'name': 'ESL Challenger League Season 47 Europe', 'start_date': '26-2', 'end_date': '16-6'}, {'id': '7749', 'name': 'Thunderpick World Championship 2024 EU Closed Qualifier 1', 'start_date': '1-4', 'end_date': '22-4'}]
+    >>>{'id': '7437', 'name': 'IEM Chengdu 2024', 'start_date': '8-4', 'end_date': '14-4'}, {'id': '7757', 'name': 'BetBoom Dacha Belgrade 2024 Europe Closed Qualifier', 'start_date': '2-4', 'end_date': '12-4'}]
     
     ```
 
@@ -108,7 +108,7 @@ pip install hltv-async-api
     ```
     await hltv.get_event_matches(7148)
     
-    >>>['date': '1-1' | 'LIVE, 'matches': ['id': '1111', team1': 'Natus Vincere', 'team2': 'FaZe']
+    >>>[{'date': 'LIVE', 'matches': [{'id': '2371135', 'team1': 'GUN5', 'team2': 'KOI', 't1_id': '12471', 't2_id': '12591'}]}, {'date': '2024-04-08', 'matches': [{'id': '2371131', 'time': '20:00', 'team1': 'Aurora', 'team2': 'Metizport', 't1_id': '11861', 't2_id': '11641'}]}]
     ```
 
 * **get_event_info(event_id: str | int, event_title: str) -> (event_id, event_title, event_start, event_end, prize, team_num, location, groups)**
