@@ -229,21 +229,22 @@ class Hltv:
             else:
                 return await self.get_upcoming_matches()
         elif type == 'news':
-            #TODO complete
-            pass
+            return await self.get_last_news()
         elif type == 'team':
             if id:
                 return await self.get_team_info(id, title)
             else:
                 return await self.get_top_teams()
 
-    async def get_live_matches(self):
+    async def get_live_matches(self, max_ = 10):
         """returns a list of all LIVE matches on HLTV along with the maps being played and the star ratings"""
         r = await self._fetch("https://www.hltv.org/matches")
         if not r:
             return
 
         live_matches = r.find("div", {'class', "liveMatchesContainer"})
+
+        #cant find a way, mby use socketio by hltv-score-bot ?? | other url ?
 
 
     async def get_upcoming_matches(self, days: int = 7, min_rating: int = 1):
@@ -354,7 +355,23 @@ class Hltv:
                         'rating': rating
                     })
 
-        return match_id, score1, score2, status, maps, stats
+        if status == "LIVE":
+            for map in maps:
+                if map["r_team1"] == '13':
+                    if len(map) != 1:
+                        score1 += 1
+                    else:
+                        score1 = 13
+                        score2 = int(map["r_team2"])
+
+                elif map["r_team1"] == '13':
+                    if len(map) != 1:
+                        score2 += 1
+                    else:
+                        score2 = 13
+                        score1 = int(map["r_team1"])
+
+        return match_id, score1, score2, status, maps, stats_
 
 
     async def get_big_results(self, offset=0) -> list[dict[str, Any]] | None:
@@ -476,8 +493,33 @@ class Hltv:
                     break
 
         return matches
+    async def get_featured_events(self, max_: int = 1):
+        r = await self._fetch('https://www.hltv.org/events')
 
-    async def get_events(self, outgoing=True, future=True, max_events=10):
+        events = []
+        try:
+            for i, event in enumerate(r.find('div', {'class': 'tab-content', 'id': 'FEATURED'}).find_all('a', {'class': 'a-reset ongoing-event'}), start=1):
+                if i > max_:
+                    break
+                event_name = event.find('div', {'class': 'text-ellipsis'}).text.strip()
+                event_start_date = self._normalize_date(
+                    event.find('span', {'data-time-format': 'MMM do'}).text.strip().split())
+
+                event_end_date = self._normalize_date(
+                    event.find_all('span', {'data-time-format': 'MMM do'})[1].text.strip().split())
+                event_id = event['href'].split('/')[-2]
+
+                events.append({
+                    'id': event_id,
+                    'name': event_name,
+                    'start_date': event_start_date,
+                    'end_date': event_end_date,
+                })
+        except AttributeError:
+            pass
+
+        return events
+    async def get_events(self, featured=True, outgoing=True, future=True, max_events=10):
         """Returns events
         :params:
         outgoing - include live tournaments
@@ -492,6 +534,7 @@ class Hltv:
             return
 
         events = []
+
         if outgoing:
             for event in r.find('div', {'class': 'tab-content', 'id': 'TODAY'}).find_all('a', {
                                 'class': 'a-reset ongoing-event'}):
@@ -772,9 +815,13 @@ class Hltv:
 
 
 async def test():
-    hltv = Hltv(debug=True)
-    print(await hltv.get_event_matches(7437))
-    print(await hltv.get_match_info('2370909',  'faze', 'nemiga', 'iem chengdu 2024'))
+    hltv = Hltv(debug=True, timeout=1)
+    print(await hltv.get_events())
+    print(await hltv.get_event_info(7437, 'iem chengdu 2024'))
+    print(await hltv.get_event_matches())
+    print(await hltv.get_event_results())
+    print(await hltv.get_upcoming_matches())
+    print(await hltv.get_match_info())
 
 if __name__ == "__main__":
     asyncio.run(test())
