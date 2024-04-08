@@ -163,6 +163,7 @@ class Hltv:
                 return True, result
         except (ClientProxyConnectionError, ClientResponseError, ClientOSError,
                 ServerDisconnectedError, TimeoutError, ClientHttpProxyError) as e:
+            self.logger.debug(e)
             delay = await self._parse_error_handler(delay)
             return False, delay
 
@@ -173,7 +174,7 @@ class Hltv:
         status = False
         try_ = 1
         result = None
-        while not status and (try_ != self.max_retries):
+        while (not status) and (try_ != self.max_retries):
             self.logger.debug(f'Trying connect to {url}, try {try_}/{self.max_retries}')
 
             # if status = True, result = page,
@@ -188,6 +189,7 @@ class Hltv:
         if not self.TRUE_SESSION:
             # Automaticaly close session after parse
             await self.close_session()
+            self.session = None
 
         if status:
             loop = get_running_loop()
@@ -212,7 +214,29 @@ class Hltv:
         day = parts[1][:-2]
         return day + '-' + month
 
-    # TODO rewrite
+    async def get(self, type: str, id: int | str | None = None,
+                  title: str | None = None,
+                  team1: str | None = None,
+                  team2: str | None = None):
+        if type == 'event':
+            if id:
+                return await self.get_event_info(id, title)
+            else:
+                return await self.get_events()
+        elif type == 'match':
+            if id:
+                return await self.get_match_info(str(id), team1, team2, title)
+            else:
+                return await self.get_upcoming_matches()
+        elif type == 'news':
+            #TODO complete
+            pass
+        elif type == 'team':
+            if id:
+                return await self.get_team_info(id, title)
+            else:
+                return await self.get_top_teams()
+
     async def get_live_matches(self):
         """returns a list of all LIVE matches on HLTV along with the maps being played and the star ratings"""
         r = await self._fetch("https://www.hltv.org/matches")
@@ -220,15 +244,7 @@ class Hltv:
             return
 
         live_matches = r.find("div", {'class', "liveMatchesContainer"})
-        if live_matches is None:
-            return []
-        else:
-            teams = [line.getText() for line in live_matches.find_all("div", {'class', "matchTeamName text-ellipsis"})]
-            matches = [(team1, team2) for team1, team2 in tuple(zip(teams, teams[1:]))[::2]]
-            liveMatchContainer = live_matches.find_all("div", {'class', "liveMatch-container"})
-            maps = [str(line.get('data-maps')).split(',') for line in liveMatchContainer]
-            stars = [line.get('stars') for line in liveMatchContainer]
-            return [{'teams': teams, 'maps': maps, 'stars': stars} for teams, maps, stars in zip(matches, maps, stars)]
+
 
     async def get_upcoming_matches(self, days: int = 7, min_rating: int = 1):
         """returns a list of all upcoming matches on HLTV"""
@@ -288,13 +304,13 @@ class Hltv:
             return None
         return matches
 
-
     async def get_match_info(self, match_id: str, team1: str, team2: str, event_title: str, stats: bool = True):
         r = await self._fetch(f"https://www.hltv.org/matches/{match_id}/"
                              f"{team1.replace(' ', '-')}-vs-"
                              f"{team2.replace(' ', '-')}-"
                              f"{event_title.replace(' ', '-')}")
-
+        if not r:
+            return
 
         status = r.find('div', {'class': 'countdown'}).text
 
@@ -757,7 +773,8 @@ class Hltv:
 
 async def test():
     hltv = Hltv(debug=True)
-    print(await hltv.get_match_info('2370727', 'faze', 'natus-vincere', 'pgl-cs2-major-copenhagen-2024'))
+    print(await hltv.get_event_matches(7437))
+    print(await hltv.get_match_info('2370909',  'faze', 'nemiga', 'iem chengdu 2024'))
 
 if __name__ == "__main__":
     asyncio.run(test())
