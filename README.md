@@ -19,7 +19,7 @@
 * **Supports proxy usage**
 
 
-* **I made it with love <3**
+* **Made with love <3**
 
 
 ---
@@ -222,7 +222,7 @@ pip install hltv-async-api
 * true_session=False
   
     **(BETA)**
-    This parser automaticaly creating and clossing sessions after every use, if you want to let your session open even when parser is inactive
+    This parser automaticaly creating and clossing session after every call, if you want to let your session open even when parser is inactive
     use this method. **!! IMPORTANT YOU SHOULD CLOSE YOUR SESSION BEFORE KILLING PROGRAM**
 
     ```
