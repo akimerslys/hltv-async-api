@@ -1,6 +1,6 @@
 [project]
 name = "hltv_async_api"
-version = "0.4.1"
+version = "0.4.3b"
 authors = [
   { name="Akim Slys", email="akimslys2003@gmail.com" },
 ]

@@ -218,19 +218,19 @@ class Hltv:
                   title: str | None = None,
                   team1: str | None = None,
                   team2: str | None = None):
-        if type == 'event':
+        if type == 'events':
             if id:
                 return await self.get_event_info(id, title)
             else:
                 return await self.get_events()
-        elif type == 'match':
+        elif type == 'matches':
             if id:
                 return await self.get_match_info(str(id), team1, team2, title)
             else:
                 return await self.get_upcoming_matches()
         elif type == 'news':
             return await self.get_last_news()
-        elif type == 'team':
+        elif type == 'teams':
             if id:
                 return await self.get_team_info(id, title)
             else:
@@ -445,7 +445,6 @@ class Hltv:
             live_matches = r.find("div", {'class', 'liveMatchesSection'}).find_all("div", {'class', 'liveMatch-container'})
         except AttributeError:
             live_matches = []
-        live_mat = []
         for live in live_matches:
             id_ = live.find('a', {'class': 'match a-reset'})['href'].split('/')[2]
             teams = live.find_all("div", class_="matchTeamName text-ellipsis")
@@ -464,20 +463,16 @@ class Hltv:
                 score_team1 = 0
                 score_team2 = 0"""
 
-            live_mat.append({
+            matches.append({
                 'id': id_,
+                'date': 'LIVE',
                 'team1': team1,
                 'team2': team2,
                 't1_id': t1_id,
                 't2_id': t2_id
             })
 
-        matches.append({
-            'date': 'LIVE',
-            'matches': live_mat,
-        })
         for date_sect in r.find_all('div', {'class': 'upcomingMatchesSection'}):
-            upc_matches = []
             date_ = date_sect.find('span', {'class': 'matchDayHeadline'}).text.split(' ')[-1]
             for match in date_sect.find_all('div', {'class': 'upcomingMatch'}):
                 teams_ = match.find_all("div", class_="matchTeamName text-ellipsis")
@@ -495,16 +490,15 @@ class Hltv:
                 except IndexError:
                     pass
 
-                upc_matches.append({
+                matches.append({
                         'id': id_,
+                        'date': date_,
                         'time': time_,
                         'team1': team1_,
                         'team2': team2_,
                         't1_id': t1_id,
                         't2_id': t2_id
                     })
-
-            matches.append({'date': date_, 'matches': upc_matches})
 
         return matches
     async def get_featured_events(self, max_: int = 1):
@@ -590,7 +584,7 @@ class Hltv:
         return events
 
     async def get_event_info(self, event_id: str | int, event_title: str):
-        #TODO ADD PLACEC FOR PAST EVENTS? OR WINNER?
+        #TODO ADD WINNER?
 
         r = await self._fetch(f"https://www.hltv.org/events/{str(event_id)}/{event_title.replace(' ', '-')}")
         if not r:
@@ -776,6 +770,7 @@ class Hltv:
         return players
 
     async def get_last_news(self, max_reg_news=2, only_today=True, only_featured=False):
+
         r = await self._fetch('https://www.hltv.org/')
 
         today = datetime.now(tz=pytz.timezone('Europe/Copenhagen'))
