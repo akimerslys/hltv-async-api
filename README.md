@@ -13,7 +13,13 @@
 * **New and modern fully async library**
 
 
-* **Supports proxy usage with huge amount of options**
+* **Huge amount of options**
+
+
+* **Supports proxy usage**
+
+
+* **I made it with love <3**
 
 
 ---
@@ -190,7 +196,8 @@ pip install hltv-async-api
 
 * proxy_list: list | None = None
 
-    list of your proxies, if your proxies doesnt have any protocol you can use proxy_protocol
+    list of your proxies, if your proxies doesnt have any protocol you can use proxy_protocol.
+    Note: To add nonproxy to list just put '' to it, you can find example with ar
 
 * proxy_path: str | None = None
 
@@ -249,6 +256,7 @@ if __name__ == "__main__":
 ```
 
 ****Proxy Parser****
+
 ```
 from hltv_async_api import Hltv
 
@@ -263,6 +271,101 @@ if __name__ == "__main__":
     asyncio.run(test())
 ```
 
+****Automatic parser with arq and redis****
+
+- to run type "arq PATH_TO_FILE.WorkerSettings"
+
+    ```
+    import ujson
+    import asyncio
+    from arq import cron
+    from redis.asyncio import Redis, ConnectionPool
+    
+    from hltv_async_api import Hltv
+    
+    
+    
+    async def startup(ctx):
+        ctx["hltv"] = Hltv(max_delay=5, use_proxy=True, proxy_list=[settings.PROXY_MAIN, ''], true_session=True, debug=True)
+        ctx["redis"] = redis_client = Redis(
+            connection_pool=ConnectionPool.from_url(settings.redis_url),
+        )
+        logger.success(f"Scheduler started. UTC time {datetime.utcnow()}")
+    
+    
+    async def shutdown(ctx):
+        await ctx["hltv"].close_session()
+        await ctx["redis"].close()
+    
+    
+    async def parse_matches(ctx):
+        hltv = ctx["hltv"]
+        redis = ctx["redis"]
+        matches = await hltv.get_upcoming_matches(1, 1)
+        if matches:
+            await redis.set("matches", ujson.dumps(matches))
+        else:
+            logger.error("error parsing matches")
+    
+    async def parse_events(ctx):
+        hltv = ctx["hltv"]
+        redis = ctx["redis"]
+        events = await hltv.get_events()
+        if events:
+            await redis.set("events", ujson.dumps(events))
+        else:
+            logger.error("error parsing events")
+    
+    
+    async def parse_top_teams(ctx):
+        hltv = ctx["hltv"]
+        redis = ctx["redis"]
+        top_teams = await hltv.get_top_teams(30)
+        if top_teams:
+            await redis.set("top_teams", ujson.dumps(top_teams))
+        else:
+            logger.error("error parsing top teams")
+    
+    
+    async def parse_top_players(ctx):
+        hltv = ctx["hltv"]
+        redis = ctx["redis"]
+        top_players = await hltv.get_best_players(30)
+        if top_players:
+            await redis.set("top_teams", ujson.dumps(top_players))
+        else:
+            logger.error("error parsing top players")
+    
+    
+    async def parse_last_news(ctx):
+        hltv = ctx["hltv"]
+        redis = ctx["redis"]
+        news = await hltv.get_last_news(only_today=True, max_reg_news=4)
+        if news:
+            await redis.set("news", ujson.dumps(news))
+        else:
+            logger.error("error parsing news")
+    
+    
+    class WorkerSettings:
+        redis_settings = settings.redis_pool
+        on_startup = startup
+        on_shutdown = shutdown
+        functions = [parse_matches,
+                     parse_events,
+                     parse_top_teams,
+                     parse_top_players,
+                     parse_last_news,
+                     ]
+        cron_jobs = [
+            cron(parse_matches, minute=59),
+            cron(parse_events, hour=0, minute=0, second=0),
+            cron(parse_top_teams, day=0, hour=18, minute=1, second=30),
+            cron(parse_top_players, day=0, hour=20, minute=0, second=0),
+            cron(parse_last_news, minute=55),
+        ]
+
+    ```
 
 # Requirements:
 
