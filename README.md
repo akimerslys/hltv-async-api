@@ -39,7 +39,7 @@ pip install hltv-async-api
     from hltv_async_api import Hltv
     
     hltv = Hltv()
-    live_matches = await hltv.get_live_matches()
+    print(await hltv.get_events())
     ```
 
 ---
@@ -78,43 +78,64 @@ pip install hltv-async-api
 ---
 # Methods
 
-* **get_upcoming_matches(days: int = 7, min_star_rating: int = 1)**
+* **get_matches(days: int = 1, min_star_rating: int = 1, live: bool = True, future: bool = True)**
 
     -days (the number of days into the future to fetch matches for)
   
     -min_star_rating (the minimum star rating for matches to include)
   
     ```
-    await hltv.get_upcoming_matches(1, 5)
+    await hltv.get_matches(days=1)
     
-    >>> ['date': '11-11', 'matches': [id: '1111', team1: 'Natus Vincere' | 'TBD', team2: 'FaZe' | 'TBD', time: '14:15', maps: '3', stars: 5, 'PGL CS2 Major Copenhagen 2024' | None]]```
+    >>> [{'id': '2371201', 'date': 'LIVE', 'time': 'LIVE', 'team1': 'Imperial', 'team2': 'MIBR', 't1_id': '9455', 't2_id': '9215', 'maps': '3', 'rating': 1, 'event': 'RES Regional Series 3 LATAM'}, {'id': '2370964', 'date': '2024-04-16', 'time': '12:30', 'team1': 'SAW', 'team2': 'Sampi', 't1_id': '10567', 't2_id': '10695', 'maps': '3', 'rating': 1, 'event': 'Thunderpick World Championship 2024 EU Closed Qualifier 1'}, {'id': '2371367', 'date': '2024-04-16', 'time': '14:00', 'team1': 'Gaimin Gladiators', 'team2': 'Permitta', 't1_id': '11571', 't2_id': '12009', 'maps': '3', 'rating': 1, 'event': 'Elisa Invitational Spring 2024'}]
     
     ```
+
+* **get_match_info(match_id: int | str, team1, team2, event_title)
+  
+    ```
+    await hltv.get_match_info(2370931, 'Mouz', 'faze', 'iem-chengdu-2024')  
+  
+    >>>(2370931, '0', '2', 'Match over', [{'mapname': 'Overpass', 'r_team1': '10', 'r_team2': '13'}, {'mapname': 'Nuke', 'r_team1': '6', 'r_team2': '13'}, {'mapname': 'Mirage', 'r_team1': '-', 'r_team2': '-'}], [{'id': '18850', 'nickname': 'Jimpphat', 'kd': '33-29', 'adr': '80.9', 'rating': '1.08'}, 
+  
+    {'id': '18072', 'nickname': 'torzsi', 'kd': '26-25', 'adr': '70.5', 'rating': '1.02'}, {'id': '13666', 'nickname': 'Brollan', 'kd': '25-31', 'adr': '68.4', 'rating': '0.90'}, {'id': '20312', 'nickname': 'xertioN', 'kd': '23-31', 'adr': '62.4', 'rating': '0.82'}, {'id': '16820', 'nickname': 'siuhy', 'kd': '17-30', 'adr': '51.6', 'rating': '0.70'}, {'id': '18053', 'nickname': 'broky', 'kd': '34-22', 'adr': '79.3', 'rating': '1.33'}, {'id': '9960', 'nickname': 'frozen', 'kd': '33-23', 'adr': '85.5', 'rating': '1.31'}, {'id': '11816', 'nickname': 'ropz', 'kd': '31-26', 'adr': '73.0', 'rating': '1.20'}, {'id': '8183', 'nickname': 'rain', 'kd': '27-26', 'adr': '82.0', 'rating': '1.18'}, {'id': '429', 'nickname': 'karrigan', 'kd': '20-28', 'adr': '49.7', 'rating': '0.81'}])  
+    
+    ```
+  
+* **get_results(days: int = 1, min_rating: int = 1, max: int = 30, featured: bool = True, regular: bool = True)) ->
+    
+    ```
+    print(await hltv.get_results())
+  
+    [{'id': '2370931', 'team1': 'MOUZ', 'team2': 'FaZe', 'score1': '0', 'score2': '2', 'rating': 0, 'event': 'IEM Chengdu 2024'}]
+    ```
+  
 * **get_events(outgoing=True, future=True, max_events=10) -> [('id', 'title', 'startdate', 'enddate')]**
 
     ```
     await hltv.get_events(future=False)
     
-    >>>{'id': '7437', 'name': 'IEM Chengdu 2024', 'start_date': '8-4', 'end_date': '14-4'}, {'id': '7757', 'name': 'BetBoom Dacha Belgrade 2024 Europe Closed Qualifier', 'start_date': '2-4', 'end_date': '12-4'}]
-    
+    >>>[{'id': '7749', 'title': 'Thunderpick World Championship 2024 EU Closed Qualifier 1', 'start_date': '1-4', 'end_date': '22-4'}, {'id': '7621', 'title': 'ESL Challenger League Season 47 North America', 'start_date': '13-2', 'end_date': '16-6'}]
+      
     ```
 
-* **get_event_results(event_id: int | str)**
+* **get_event_results(event_id: int | str, days: int = 1, max_: int = 10)**
 
   
     ```
     await get_event_results(7148)
     
-    >>> ['date': '31-3', 'matches': ['id': '1111', team1': 'FaZe', 'team2': 'Natus Vincere', 'score1': '1', 'score2': '2']]
-    
+    >>>[{'id': '2370931', 'date': '14-04-2024', 'team1': 'MOUZ', 'team2': 'FaZe', 'score1': '0', 'score2': '2'}]
+
     ```
 
-* **get_event_matches(event_id: str | int):**
+* **get_event_matches(event_id: str | int, days: int = 1):**
   
     ```
     await hltv.get_event_matches(7148)
     
-    >>>[{'date': 'LIVE', 'matches': [{'id': '2371135', 'team1': 'GUN5', 'team2': 'KOI', 't1_id': '12471', 't2_id': '12591'}]}, {'date': '2024-04-08', 'matches': [{'id': '2371131', 'time': '20:00', 'team1': 'Aurora', 'team2': 'Metizport', 't1_id': '11861', 't2_id': '11641'}]}]
+    >>>[{'id': '2370771', 'date': '2024-04-18', 'time': '15:30', 'team1': 'Monte', 'team2': 'paiN', 't1_id': '11811', 't2_id': '4773'}, {'id': '2370772', 'date': '2024-04-18', 'time': '17:00', 'team1': 'Imperial', 'team2': 'Metizport', 't1_id': '9455', 't2_id': '11641'}, {'id': '2370773', 'date': '2024-04-18', 'time': '18:30', 'team1': 'FURIA', 'team2': '9z', 't1_id': '8297', 't2_id': '9996'}, {'id': '2370774', 'date': '2024-04-18', 'time': '20:00', 'team1': 'MIBR', 'team2': 'OG', 't1_id': '9215', 't2_id': '10503'}, {'id': '2370775', 'date': '2024-04-18', 'time': '21:30', 'team1': 'TBD', 'team2': 'TBD', 't1_id': 0, 't2_id': 0}, {'id': '2370776', 'date': '2024-04-18', 'time': '23:00', 'team1': 'TBD', 'team2': 'TBD', 't1_id': 0, 't2_id': 0}, {'id': '2370777', 'date': '2024-04-19', 'time': '00:00', 'team1': 'TBD', 'team2': 'TBD', 't1_id': 0, 't2_id': 0}, {'id': '2370778', 'date': '2024-04-19', 'time': '15:00', 'team1': 'TBD', 'team2': 'TBD', 't1_id': 0, 't2_id': 0}, {'id': '2370779', 'date': '2024-04-19', 'time': '17:30', 'team1': 'TBD', 'team2': 'TBD', 't1_id': 0, 't2_id': 0}, {'id': '2370780', 'date': '2024-04-19', 'time': '20:00', 'team1': 'TBD', 'team2': 'TBD', 't1_id': 0, 't2_id': 0}, {'id': '2370781', 'date': '2024-04-19', 'time': '22:30', 'team1': 'TBD', 'team2': 'TBD', 't1_id': 0, 't2_id': 0}, {'id': '2370782', 'date': '2024-04-20', 'time': '00:30', 'team1': 'TBD', 'team2': 'TBD', 't1_id': 0, 't2_id': 0}, {'id': '2370783', 'date': '2024-04-20', 'time': '15:00', 'team1': 'TBD', 'team2': 'TBD', 't1_id': 0, 't2_id': 0}, {'id': '2370784', 'date': '2024-04-20', 'time': '18:00', 'team1': 'TBD', 'team2': 'TBD', 't1_id': 0, 't2_id': 0}]
+  
     ```
 
 * **get_event_info(event_id: str | int, event_title: str) -> (event_id, event_title, event_start, event_end, prize, team_num, location, groups)**
@@ -139,25 +160,37 @@ pip install hltv-async-api
     ```
     await hltv.get_team_info(6667, 'faze')
     
-    >>>(6667, 'faze', '1', ['karrigan', 'rain', 'frozen', 'ropz', 'broky'], 'NEO', '26.5', '256', 'CS Asia Championships 2023', 21)
+    >>>(6667, 'faze', '1', ['karrigan', 'rain', 'frozen', 'ropz', 'broky'], 'NEO', '26.6', '258', 'IEM Chengdu 2024', 22)
     ```
 
 * **get_last_news(max_reg_news=2, only_today=True, only_featured=False) -> [date, [featured_id, featured_title, featured_desciption], [regular_id, reg_title, reg_time]]**
 
     ```
-    await hltv.get_last_news(only_today=True, max_reg_news=1)
+    await hltv.get_last_news(only_today=True)
     
-    >>>[{'date': '02-04', 'f_news': [{'f_id': '38682', 'f_title': 'NIP confirm r1nkle signing', 'f_desc': "Ninjas in Pyjamas only have an anchor player left to sign following the young Ukrainian AWPer's addition."}], 'news': [{'id': '38685', 'title': 'Rounds add sLowi, p3kko', 'posted': 'an hour ago'}, {'id': '38690', 'title': 'n1ssim returns to Sharks after paiN loan deal expires', 'posted': 'an hour ago'}]}]
+    >>>[{'date': '15-04', 'f_news': [], 'news': [{'id': '38784', 'title': 'Media: FURIA practicing with kye in place of arT', 'posted': 'an hour ago'}, {'id': '38783', 'title': 'electroNic to play for Virtus.pro at ESL Pro League S19', 'posted': '2 hours ago'}, {'id': '38781', 'title': 'The EVPs and Best Five of IEM Chengdu', 'posted': '7 hours ago'}]}]
+  
     ```
 
-* **get_best_players(top=40) -> ('rank', 'name', 'team', 'maps', 'rating')**
+* **get_best_players(top: int = 40) -> ('rank', 'name', 'team', 'maps', 'rating')**
 
     ```
     await hltv.get_best_players(2)
     
-    >>>[{'rank': 1, 'name': 'donk', 'team': 'Spirit', 'maps': '33', 'rating': '1.52'}, {'rank': 2, 'name': 'm0NESY', 'team': 'G2', 'maps': '34', 'rating': '1.38'}]
+    >>>[{'id': '19230', 'rank': 1, 'name': 'm0NESY', 'team': 'G2', 'maps': '44', 'rating': '1.37'}, {'id': '18053', 'rank': 2, 'name': 'broky', 'team': 'FaZe', 'maps': '54', 'rating': '1.19'}]
     ```
 
+* **get async def get(type: str, id: int | str | None = None, title: str | None = None, team1: str | None = None, team2: str | None = None):**
+  (BETA) This method is not finished. Possible types 'events', 'matches', 'teams', also u can add id | title | team1 | team2, to parse more.
+  ex. 
+  
+  ```
+  
+  await hltv.get('matches', 2371201, 'res-regional-series-3-latam', 'IMPERIAL', 'MIBR')
+  
+  >>> (2371201, 0, 0, 'LIVE', [{'mapname': 'Vertigo', 'r_team1': '6', 'r_team2': '13'}, {'mapname': 'Mirage', 'r_team1': '-', 'r_team2': '-'}, {'mapname': 'Anubis', 'r_team1': '-', 'r_team2': '-'}], [])
+  
+  ```
 ---
 # Configs
 
