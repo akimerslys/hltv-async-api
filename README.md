@@ -180,7 +180,7 @@ pip install hltv-async-api
     >>>[{'id': '19230', 'rank': 1, 'name': 'm0NESY', 'team': 'G2', 'maps': '44', 'rating': '1.37'}, {'id': '18053', 'rank': 2, 'name': 'broky', 'team': 'FaZe', 'maps': '54', 'rating': '1.19'}]
     ```
 
-* **get async def get(type: str, id: int | str | None = None, title: str | None = None, team1: str | None = None, team2: str | None = None):**
+* **get(type: str, id: int | str | None = None, title: str | None = None, team1: str | None = None, team2: str | None = None):**
   (BETA) This method is not finished. Possible types 'events', 'matches', 'teams', also u can add id | title | team1 | team2, to parse more.
   ex. 
   
