@@ -1,3 +1,4 @@
+import time
 from typing import Any, List
 from datetime import date, datetime, timedelta
 import pytz
@@ -18,14 +19,13 @@ import logging
 class Hltv:
     def __init__(self, max_delay: int = 15,
                  timeout: int = 5,
-                 use_proxy: bool = False,
                  proxy_path: str | None = None,
                  proxy_list: list | None = None,
                  debug: bool = False,
                  max_retries: int = 0,
                  proxy_protocol: str | None = None,
                  proxy_one_time: bool = False,
-                 true_session: bool = False,
+                 one_time_session: bool = True,
                  ):
         self.headers = {
             "referer": "https://www.hltv.org/stats",
@@ -35,11 +35,12 @@ class Hltv:
         self.MAX_DELAY = max_delay
         self.timeout = timeout
         self.max_retries = max_retries
-        self.USE_PROXY = use_proxy
         self.PROXY_PATH = proxy_path
         self.PROXY_LIST = proxy_list
         self.PROXY_PROTOCOL = proxy_protocol
         self.PROXY_ONCE = proxy_one_time
+        self.ONE_TIME_SESSION = one_time_session
+        self.session = None
         self.DEBUG = debug
         self._configure_logging()
         self.logger = logging.getLogger(__name__)
@@ -48,16 +49,21 @@ class Hltv:
             with open(self.PROXY_PATH, "r") as file:
                 self.PROXY_LIST = [line.strip() for line in file.readlines()]
 
-        self.TRUE_SESSION = true_session
-        self.session = None
+        if proxy_path or proxy_list:
+            self.USE_PROXY = True
+        else:
+            self.USE_PROXY = False
+
+        self._create_session()
 
     def _configure_logging(self):
         level = logging.DEBUG if self.DEBUG else logging.INFO
         logging.basicConfig(level=level, format="%(message)s")
 
-    async def _create_session(self):
-        self.logger.debug('Creating Session')
-        self.session = ClientSession()
+    def _create_session(self):
+        if not self.session:
+            self.logger.debug('Creating Session')
+            self.session = ClientSession()
 
     async def close_session(self):
         if self.session:
@@ -74,7 +80,7 @@ class Hltv:
                max_retries: int | None = None,
                proxy_protocol: str | None = None,
                proxy_one_time: bool | None = None,
-               true_session: bool | None = None,
+               one_time_session: bool | None = None,
                ):
         if max_delay:
             self.MAX_DELAY = max_delay
@@ -90,8 +96,8 @@ class Hltv:
             self.PROXY_PROTOCOL = proxy_protocol
         if proxy_one_time is not None:
             self.PROXY_ONCE = proxy_one_time
-        if true_session is not None:
-            self.TRUE_SESSION = true_session
+        if one_time_session is not None:
+            self.ONE_TIME_SESSION = one_time_session
         if debug is not None:
             self.DEBUG = debug
             self._configure_logging()
@@ -99,7 +105,7 @@ class Hltv:
             with open(self.PROXY_PATH, "r") as file:
                 self.PROXY_LIST = [line.strip() for line in file.readlines()]
 
-    async def _get_proxy(self):
+    def _get_proxy(self):
         proxy = self.PROXY_LIST[0]
 
         if self.PROXY_PROTOCOL and proxy != '' and self.PROXY_PROTOCOL not in proxy:
@@ -107,7 +113,7 @@ class Hltv:
 
         return proxy
 
-    async def _switch_proxy(self):
+    def _switch_proxy(self):
         if self.PROXY_ONCE:
             self.logger.debug(f'Removing proxy {self.PROXY_LIST[0]}')
             self.PROXY_LIST = self.PROXY_LIST[1:]
@@ -129,9 +135,9 @@ class Hltv:
                 return True
         return False
 
-    async def _parse_error_handler(self, delay: int = 0) -> int:
+    def _parse_error_handler(self, delay: int = 0) -> int:
         if self.USE_PROXY:
-            await self._switch_proxy()
+            self._switch_proxy()
         else:
             if delay < self.MAX_DELAY:
                 delay += 1
@@ -145,7 +151,7 @@ class Hltv:
         proxy = ''
         # setup new proxy, cuz old one was switched
         if self.USE_PROXY:
-            proxy = await self._get_proxy()
+            proxy = self._get_proxy()
         else:
             # delay, only for non proxy users. (default = 1-15s)
             await asyncio.sleep(delay)
@@ -154,24 +160,25 @@ class Hltv:
                 self.logger.info(f"Fetching {url}, code: {response.status}")
                 if response.status == 403 or response.status == 404:
                     self.logger.debug("Got 403 forbitten")
-                    return False, await self._parse_error_handler(delay)
+                    return False, self._parse_error_handler(delay)
 
                 # checking for challenge page.
                 result = await response.text()
                 if await self._cloudflare_check(result):
-                    return False, await self._parse_error_handler(delay)
+                    return False, self._parse_error_handler(delay)
 
                 return True, result
         except (ClientProxyConnectionError, ClientResponseError, ClientOSError,
                 ServerDisconnectedError, TimeoutError, ClientHttpProxyError) as e:
             self.logger.debug(e)
-            delay = await self._parse_error_handler(delay)
+            delay = self._parse_error_handler(delay)
+            return False, delay
+        except ClientTimeout:
             return False, delay
 
     async def _fetch(self, url, delay: int = 0):
         if not self.session:
-            await self._create_session()
-
+            self._create_session()
         status = False
         try_ = 1
         result = None
@@ -188,11 +195,8 @@ class Hltv:
                 delay = result
             try_ += 1
 
-        # After Parse
-        if not self.TRUE_SESSION:
-            # Automatically close session after parse
+        if not self.ONE_TIME_SESSION:
             await self.close_session()
-
         if status:
             loop = get_running_loop()
             parsed = await loop.run_in_executor(None, partial(self._f, result))
@@ -282,7 +286,7 @@ class Hltv:
                             'event': event
                         })
 
-            if upcoming:
+            if future:
                 for i, date_div in enumerate(r.find_all('div', {'class': 'upcomingMatchesSection'}), start=1):
                     if i > days:
                         break
@@ -292,13 +296,18 @@ class Hltv:
                         time_ = match.find('div', {'class': 'matchTime'}).text
                         rating = int(match['stars'])
                         if rating >= min_rating:
+                            id_ = 0
+                            t1_id = 0
+                            t2_id = 0
+                            team1 = 'TBD'
+                            team2 = 'TBD'
+
                             try:
-                                match_id_ = match.find('a')['href'].split('/')[2]
+                                id_ = match.find('a')['href'].split('/')[2]
                                 t1_id = match['team1']
                                 t2_id = match['team2']
                             except (IndexError, AttributeError, KeyError):
-                                t1_id = 0
-                                t2_id = 0
+                                pass
                             maps = match.find('div', {'class': 'matchMeta'}).text[-1:]
                             try:
                                 teams = match.find_all('div', {'class': 'matchTeamName text-ellipsis'})
@@ -306,8 +315,7 @@ class Hltv:
                                 team1 = teams[0].text
                                 team2 = teams[1].text
                             except (IndexError, AttributeError):
-                                team1 = 'TBD'
-                                team2 = 'TBD'
+                                pass
 
                             try:
                                 event = match.find('div', {'class', 'matchEventName gtSmartphone-only'}).text
@@ -319,7 +327,7 @@ class Hltv:
                                     event = ''
 
                             matches.append({
-                                'id': match_id_,
+                                'id': id_,
                                 'date': date_,
                                 'time': time_,
                                 'team1': team1,
@@ -333,6 +341,7 @@ class Hltv:
 
         except AttributeError:
             return None
+
         return matches
 
     async def get_match_info(self, match_id: str | int, team1: str, team2: str, event_title: str, stats: bool = True):
@@ -400,7 +409,7 @@ class Hltv:
                         score2 = 13
                         score1 = int(map["r_team1"])
 
-        return match_id, score1, score2, status, maps, stats_
+        return {'id': match_id, 'score1': score1, 'score2': score2, 'status': status, 'maps': maps, 'stats': stats_}
 
     async def get_results(self, days: int = 1,
                           min_rating: int = 1,
@@ -435,13 +444,13 @@ class Hltv:
                 s_t2 = scores[1].strip()
 
                 results.append({
-                            'id': match_id,
-                            'team1': team1,
-                            'team2': team2,
-                            'score1': s_t1,
-                            'score2': s_t2,
-                            'rating': rating,
-                            'event': event,
+                    'id': match_id,
+                    'team1': team1,
+                    'team2': team2,
+                    'score1': s_t1,
+                    'score2': s_t2,
+                    'rating': rating,
+                    'event': event,
                 })
 
         if regular:
@@ -477,14 +486,14 @@ class Hltv:
                         s_t2 = scores[1].strip()
 
                         results.append({
-                                    'id': match_id,
-                                    'date': date_,
-                                    'team1': team1,
-                                    'team2': team2,
-                                    'score1': s_t1,
-                                    'score2': s_t2,
-                                    'rating': rating,
-                                    'event': event,
+                            'id': match_id,
+                            'date': date_,
+                            'team1': team1,
+                            'team2': team2,
+                            'score1': s_t1,
+                            'score2': s_t2,
+                            'rating': rating,
+                            'event': event,
                         })
 
                         n += 1
@@ -499,7 +508,8 @@ class Hltv:
         match_results = []
 
         n = 0
-        for i, result in enumerate(r.find("div", {'class', 'results-holder'}).find_all("div", {'class', 'results-sublist'}), start=1):
+        for i, result in enumerate(
+                r.find("div", {'class', 'results-holder'}).find_all("div", {'class', 'results-sublist'}), start=1):
             if i > days or n > max_:
                 break
             date = self.__normalize_date(result.find("span", class_="standard-headline").text.strip())
@@ -682,7 +692,7 @@ class Hltv:
     async def get_event_info(self, event_id: str | int, event_title: str):
         # TODO ADD WINNER?
 
-        r = await self._fetch(f"https://www.hltv.org/events/{str(event_id)}/{event_title.replace(' ', '-')}")
+        r = await self._fetch(f"https://hltv.org/events/{str(event_id)}/{event_title.replace(' ', '-')}")
         if not r:
             return
 
@@ -709,7 +719,14 @@ class Hltv:
         except AttributeError:
             groups = []
 
-        return event_id, event_title, event_start, event_end, prize, team_num, location, groups
+        return {'id': event_id,
+                'title': event_title,
+                'start': event_start,
+                'end': event_end,
+                'prize': prize,
+                'teams': team_num,
+                'location': location,
+                'group': groups}
 
     async def get_top_teams(self, max_teams=30):
         """
@@ -769,7 +786,7 @@ class Hltv:
 
         return teams
 
-    async def get_team_info(self, team_id: int | str, title: str) -> tuple | None:
+    async def get_team_info(self, team_id: int | str, title: str) -> dict[str, list[str]]:
         """
         Returns Information about team
         :params:
@@ -791,24 +808,35 @@ class Hltv:
             coach = ''
 
             for i, stat in enumerate(r.find_all('div', {'class': 'profile-team-stat'}), start=1):
-                if i == 1:
-                    rank = stat.find('a').text[1:]
-                elif i == 2:
-                    weeks = stat.find('span', {'class': 'right'}).text
-                elif i == 3:
-                    age = stat.find('span', {'class': 'right'}).text
-                elif i == 4:
-                    coach = stat.find('span', {'class': 'bold a-default'}).text[1:-1]
+                try:
+                    if i == 1:
+                        rank = stat.find('a').text[1:]
+                    elif i == 2:
+                        weeks = stat.find('span', {'class': 'right'}).text
+                    elif i == 3:
+                        age = stat.find('span', {'class': 'right'}).text
+                    elif i == 4:
+                        coach = stat.find('span', {'class': 'bold a-default'}).text[1:-1]
+                except AttributeError:
+                    pass
 
             last_trophy = None
-            total_trophys = None
+            total_trophies = None
             try:
                 last_trophy = r.find('div', {'class': 'trophyHolder'}).find('span')['title']
-                total_trophys = len(r.find_all('div', {'class': 'trophyHolder'}))
+                total_trophies = len(r.find_all('div', {'class': 'trophyHolder'}))
             except AttributeError:
                 pass
 
-            return team_id, title, rank, players, coach, age, weeks, last_trophy, total_trophys
+            return {'id': team_id,
+                    'title': title,
+                    'rank': rank,
+                    'players': players,
+                    'coach': coach,
+                    'age': age,
+                    'weekstop30': weeks,
+                    'last_trophy': last_trophy,
+                    'total_trophies': total_trophies}
         except AttributeError:
             raise AttributeError("Parsing error, probably page not fully loaded")
 
@@ -922,12 +950,9 @@ class Hltv:
         return news
 
 
-async def test():
-    hltv = Hltv(debug=True, timeout=1, max_delay=5, true_session=True, use_proxy=True, proxy_list=['', ''])
-    print(await hltv.get('matches', 2371201, 'res-regional-series-3-latam', 'IMPERIAL', 'MIBR'))
+async def main():
+    hltv = Hltv()
+    print(await hltv.get_matches())
 
-    await hltv.close_session()
-
-
-if __name__ == "__main__":
-    asyncio.run(test())
+if __name__ == '__main__':
+    asyncio.run(main())

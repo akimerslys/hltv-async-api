@@ -244,3 +244,4 @@ proxies_list.txt
 src/hltv-aio/proxies.txt
 src/hltv-aio/proxy_test.txt
 pypi
+proxies.txt
