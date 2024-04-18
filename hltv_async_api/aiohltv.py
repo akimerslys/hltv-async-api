@@ -1,3 +1,4 @@
+import atexit
 import time
 from typing import Any, List
 from datetime import date, datetime, timedelta
@@ -35,32 +36,41 @@ class Hltv:
         self.MAX_DELAY = max_delay
         self.timeout = timeout
         self.max_retries = max_retries
-        self.PROXY_PATH = proxy_path
-        self.PROXY_LIST = proxy_list
-        self.PROXY_PROTOCOL = proxy_protocol
-        self.PROXY_ONCE = proxy_one_time
-        self.ONE_TIME_SESSION = one_time_session
-        self.session = None
         self.DEBUG = debug
         self._configure_logging()
         self.logger = logging.getLogger(__name__)
 
+        self.PROXY_PATH = proxy_path
+        self.PROXY_LIST = proxy_list
+        self.PROXY_PROTOCOL = proxy_protocol
+        self.PROXY_ONCE = proxy_one_time
+
         if self.PROXY_PATH:
             with open(self.PROXY_PATH, "r") as file:
-                self.PROXY_LIST = [line.strip() for line in file.readlines()]
+                    self.PROXY_LIST = [line.strip() for line in file.readlines()]
+
+        if self.PROXY_PROTOCOL:
+            self.PROXY_LIST = [self.PROXY_PROTOCOL + '://' + proxy[i] for i, proxy in enumerate(self.PROXY_LIST, start=0)]
 
         if proxy_path or proxy_list:
             self.USE_PROXY = True
         else:
             self.USE_PROXY = False
 
-        self._create_session()
+        self.session = None
 
     def _configure_logging(self):
         level = logging.DEBUG if self.DEBUG else logging.INFO
         logging.basicConfig(level=level, format="%(message)s")
 
-    def _create_session(self):
+    async def __aenter__(self):
+        await self._create_session()
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        await self.close_session()
+
+    async def _create_session(self):
         if not self.session:
             self.logger.debug('Creating Session')
             self.session = ClientSession()
@@ -178,7 +188,7 @@ class Hltv:
 
     async def _fetch(self, url, delay: int = 0):
         if not self.session:
-            self._create_session()
+            await self._create_session()
         status = False
         try_ = 1
         result = None
@@ -195,8 +205,6 @@ class Hltv:
                 delay = result
             try_ += 1
 
-        if not self.ONE_TIME_SESSION:
-            await self.close_session()
         if status:
             loop = get_running_loop()
             parsed = await loop.run_in_executor(None, partial(self._f, result))
@@ -249,7 +257,8 @@ class Hltv:
     async def get_matches(self, days: int = 1, min_rating: int = 1, live: bool = True, future: bool = True):
         """returns a list of all upcoming matches on HLTV"""
         r = await self._fetch("https://www.hltv.org/matches")
-        if not r: return
+        if not r:
+            return
 
         matches = []
 

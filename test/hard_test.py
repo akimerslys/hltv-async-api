@@ -21,12 +21,6 @@ class HltvHardTest:
         self.results: int | str = 0
         self.teams: int | str = 0
         self.players: int | str = 0
-        self.MATCHES_SUCCESS = False
-        self.EVENTS_SUCCESS = False
-        self.NEWS_SUCCESS = False
-        self.RESULTS_SUCCESS = False
-        self.TEAMS_SUCCESS = False
-        self.PLAYERS_SUCCESS = False
 
         if hltv:
             self.hltv = hltv
@@ -170,8 +164,9 @@ class HltvHardTest:
 
 @pytest.mark.asyncio
 async def main():
-    hltv = Hltv(proxy_path='proxies.txt', proxy_protocol='http', timeout=3, debug=True)
-    HltvHardTest(hltv=hltv, debug=True)
+    hltv = Hltv()
+    test = HltvHardTest(hltv=hltv)
+    await test.start_test()
 
 
 if __name__ == '__main__':

@@ -39,7 +39,19 @@ pip install hltv-async-api
     from hltv_async_api import Hltv
     
     hltv = Hltv()
-    print(await hltv.get_events())
+    print(await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
+    await hltv.close_session()
+
+    ```
+
+  **OR**
+
+    ```
+    from hltv_async_api import Hltv
+    
+    async with Hltv() as hltv:
+      print(await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
+
     ```
 
 ---
@@ -51,20 +63,23 @@ pip install hltv-async-api
     ```
     proxy_list = ['http://120.234.203.171:9002', 'http://110.38.68.38:80']
     
-    hltv = Hltv(use_proxy=True, proxy_list=proxy_list)
+    hltv = Hltv(proxy_list=proxy_list)
+
     ```
 
 **Load Proxies from file**
 
     ```
-    hltv = Hltv(use_proxy=True, proxy_path='PATH_TO_PROXY.TXT')
+    hltv = Hltv(proxy_path='PATH_TO_PROXY.TXT')
     ```
 
 
 **One-time proxy**
+
+    removes bad proxies from list
     
     ```
-    hltv = Hltv(use_proxy=True, proxy_path='PATH_TO_PROXY.TXT', proxy_one_time=True)
+    hltv = Hltv(proxy_path='PATH_TO_PROXY.TXT', proxy_one_time=True)
     ```
 
 **Protocol usage**
@@ -72,7 +87,7 @@ pip install hltv-async-api
     ```
     proxy_list = ['120.234.203.171:9002', '110.38.68.38:80']
     
-    hltv = Hltv(use_proxy=True, proxy_list=proxy_list, proxy_protocol='http')
+    hltv = Hltv(proxy_list=proxy_list, proxy_protocol='http')
     ```
 
 ---
@@ -143,7 +158,8 @@ pip install hltv-async-api
     ```
     await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024')
     
-    (7148, 'PGL CS2 Major Copenhagen2024', '21-3', '31-3', '$1,250,000', '16', 'Copenhagen, Denmark', [])
+    {'id': 7148, 'title': 'PGL CS2 Major Copenhagen2024', 'start': '21-3', 'end': '31-3', 'prize': '$1,250,000', 'teams': '16', 'location': 'Copenhagen, Denmark', 'group': []}
+   
     ```
 
 
@@ -250,25 +266,7 @@ pip install hltv-async-api
 
 * debug: bool = False
 
-    More loggs
 
-* true_session=False
-  
-    **(BETA)**
-    This parser automaticaly creating and clossing session after every call, if you want to let your session open even when parser is inactive
-    use this method. **!! IMPORTANT YOU SHOULD CLOSE YOUR SESSION BEFORE KILLING PROGRAM**
-
-    ```
-    async def test():
-        hltv = Hltv(true_session=True)
-        print(await hltv.get_best_players())
-        print(await hltv.get_upcoming_matches())
-        await hltv.close_session()
-
-    if __name__ == "__main__":
-        asyncio.run(test())
-    ```
-    
 ---
 # Examples
 
