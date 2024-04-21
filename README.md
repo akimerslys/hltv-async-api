@@ -36,21 +36,23 @@ pip install hltv-async-api
 # Simple Usage
 
     ```
+
     from hltv_async_api import Hltv
     
-    hltv = Hltv()
-    print(await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
-    await hltv.close_session()
+    async with Hltv() as hltv:
+      print(await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
 
     ```
 
   **OR**
 
     ```
+
     from hltv_async_api import Hltv
     
-    async with Hltv() as hltv:
-      print(await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
+    hltv = Hltv()
+    print(await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
+    await hltv.close_session()
 
     ```
 
@@ -265,6 +267,12 @@ pip install hltv-async-api
 
 * debug: bool = False
 
+* tz: str = 'Europe/Copenhagen':
+    
+    Timezone config. 
+ 
+    <a href='https://gist.github.com/heyalexej/8bf688fd67d7199be4a1682b3eec7568'>Tap here </a> to see all available timezones
+
 
 ---
 # Examples
@@ -277,9 +285,8 @@ from hltv_async_api import Hltv
 
 async def test():
 
-    hltv = Hltv()
-    
-    print(await hltv.get_event_info(7148, 'pgl-cs2-major-copenhagen-2024'))
+    async with Hltv() as hltv:
+      print(await hltv.get_event_info(7148, 'pgl-cs2-major-copenhagen-2024'))
 
 if __name__ == "__main__":
     asyncio.run(test())

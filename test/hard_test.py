@@ -49,7 +49,7 @@ class HltvHardTest:
             self.parse_and_assert(self.parse_top_players()),
             self.parse_and_assert(self.parse_top_teams()),
         )
-        await self.hltv.close_session()
+        await self.hltv.close()
         self.logger.info(self.matches)
         self.logger.info(self.events)
         self.logger.info(self.teams)

@@ -1,5 +1,3 @@
-import atexit
-import time
 from typing import Any, List
 from datetime import date, datetime, timedelta
 import pytz
@@ -26,18 +24,23 @@ class Hltv:
                  max_retries: int = 0,
                  proxy_protocol: str | None = None,
                  proxy_one_time: bool = False,
+                 tz: str = 'Europe/Copenhagen',
                  ):
         self.headers = {
             "referer": "https://www.hltv.org/stats",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            "hltvTimeZone": "Europe/Copenhagen"     # TODO Timezone settings???
+            "hltvTimeZone": "Europe/Copenhagen"
         }
-        self.MAX_DELAY = max_delay
-        self.timeout = timeout
-        self.max_retries = max_retries
         self.DEBUG = debug
         self._configure_logging()
         self.logger = logging.getLogger(__name__)
+
+        self.MAX_DELAY = max_delay
+        self.timeout = timeout
+        self.max_retries = max_retries
+
+        self.TIMEZONE = tz
+        self._check_tz()
 
         self.PROXY_PATH = proxy_path
         self.PROXY_LIST = proxy_list
@@ -46,7 +49,7 @@ class Hltv:
 
         if self.PROXY_PATH:
             with open(self.PROXY_PATH, "r") as file:
-                    self.PROXY_LIST = [line.strip() for line in file.readlines()]
+                self.PROXY_LIST = [line.strip() for line in file.readlines()]
 
         if self.PROXY_PROTOCOL:
             self.PROXY_LIST = [self.PROXY_PROTOCOL + '://' + proxy for i, proxy in enumerate(self.PROXY_LIST, start=0)]
@@ -67,14 +70,14 @@ class Hltv:
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
-        await self.close_session()
+        await self.close()
 
     async def _create_session(self):
         if not self.session:
             self.logger.debug('Creating Session')
             self.session = ClientSession()
 
-    async def close_session(self):
+    async def close(self):
         if self.session:
             self.logger.debug('Closing Session')
             await self.session.close()
@@ -89,7 +92,7 @@ class Hltv:
                max_retries: int | None = None,
                proxy_protocol: str | None = None,
                proxy_one_time: bool | None = None,
-               one_time_session: bool | None = None,
+               tz: str = None,
                ):
         if max_delay:
             self.MAX_DELAY = max_delay
@@ -105,14 +108,22 @@ class Hltv:
             self.PROXY_PROTOCOL = proxy_protocol
         if proxy_one_time is not None:
             self.PROXY_ONCE = proxy_one_time
-        if one_time_session is not None:
-            self.ONE_TIME_SESSION = one_time_session
+        if tz is not None:
+            self.TIMEZONE = tz
+            self._check_tz()
         if debug is not None:
             self.DEBUG = debug
             self._configure_logging()
         if proxy_file_path:
             with open(self.PROXY_PATH, "r") as file:
                 self.PROXY_LIST = [line.strip() for line in file.readlines()]
+
+    def _check_tz(self):
+        try:
+            pytz.timezone(self.TIMEZONE)
+        except pytz.exceptions.UnknownTimeZoneError:
+            self.logger.error('UnknownTimeZoneError, using default timezone: Europe/Copenhagen')
+            self.TIMEZONE = 'Europe/Copenhagen'
 
     def _get_proxy(self):
         proxy = self.PROXY_LIST[0]
@@ -231,6 +242,16 @@ class Hltv:
         date = datetime.strptime(date_string, "%B%d%Y")
         return date.strftime("%d-%m-%Y")
 
+    def _localize_datetime_to_timezone(self, date_: datetime = None, date_str: str = None) -> datetime:
+        if self.TIMEZONE == 'Europe/Copenhagen':
+            return date_
+        if date_str:
+            date_ = datetime.strptime(date_str, '%d-%m-%Y')
+        if date_.tzinfo:
+            return date_.astimezone(pytz.timezone(self.TIMEZONE))
+        else:
+            return date_.replace(tzinfo=pytz.timezone('Europe/Copenhagen')).astimezone(pytz.timezone(self.TIMEZONE))
+
     async def get(self, type: str, id: int | str | None = None,
                   title: str | None = None,
                   team1: str | None = None,
@@ -302,6 +323,8 @@ class Hltv:
 
                     for match in date_div.find_all('div', {'class': 'upcomingMatch'}):
                         time_ = match.find('div', {'class': 'matchTime'}).text
+                        dtime_ = datetime.strptime(date_ + '/' + time_, "%Y-%m-%d/%H:%M")
+                        dtime = self._localize_datetime_to_timezone(date_=dtime_)
                         rating = int(match['stars'])
                         if rating >= min_rating:
                             id_ = 0
@@ -336,8 +359,8 @@ class Hltv:
 
                             matches.append({
                                 'id': id_,
-                                'date': date_,
-                                'time': time_,
+                                'date': dtime.strftime('%d-%m-%Y'),
+                                'time': dtime.strftime('%d-%m-%Y'),
                                 'team1': team1,
                                 'team2': team2,
                                 't1_id': t1_id,
@@ -380,13 +403,13 @@ class Hltv:
                 elif 's' in component:
                     seconds = int(component.replace("s", ""))
 
-            date_ = datetime.now(tz=pytz.timezone('Europe/Copenhagen')) + timedelta(days=days,
-                                                                                         hours=hours,
-                                                                                         minutes=minutes,
-                                                                                         seconds=seconds)
+            date_ = datetime.now(tz=pytz.timezone('Europe/Copenhagen')).replace(second=0, microsecond=0) + timedelta(
+                days=days,
+                hours=hours,
+                minutes=minutes,
+                seconds=seconds)
 
-            status = date_.strftime('%d-%m-%Y-%H-%M')
-
+            status = self._localize_datetime_to_timezone(date_=date_).strftime('%d-%m-%Y-%H-%M')
 
         score1, score2 = 0, 0
 
@@ -397,16 +420,27 @@ class Hltv:
 
         maps = []
         for map_div in r.find_all('div', {'class': 'mapholder'}):
-
             mapname = map_div.find('div', {'class': 'mapname'}).text
-            try:
-                r_teams = map_div.find_all('div', {'class': 'results-team-score'})
-                r_team1 = r_teams[0].text
-                r_team2 = r_teams[1].text
-            except (AttributeError, IndexError):
-                r_team1 = '0'
-                r_team2 = '0'
-            maps.append({'mapname': mapname, 'r_team1': r_team1, 'r_team2': r_team2})
+            pick = ''
+            r_team1 = '0'
+            r_team2 = '0'
+            if mapname != 'TBA':
+                try:
+                    r_teams = map_div.find_all('div', {'class': 'results-team-score'})
+                    r_team1 = r_teams[0].text
+                    r_team2 = r_teams[1].text
+                except (AttributeError, IndexError, TypeError):
+                    r_team1 = '0'
+                    r_team2 = '0'
+                try:
+                    if 'pick' in map_div.find('div', class_='results-left')['class']:
+                        pick = team1
+                    elif 'pick' in map_div.find('span', class_='results-right')['class']:
+                        pick = team2
+                except TypeError:
+                    pick = ''
+
+            maps.append({'mapname': mapname, 'r_team1': r_team1, 'r_team2': r_team2, 'pick': pick})
 
         stats_ = []
         if stats and status_int == 0:
@@ -459,34 +493,38 @@ class Hltv:
         results = []
 
         if featured:
-            big_res = r.find("div", {'class', "big-results"}).find_all("a", {"class": "a-reset"})
-            for res in big_res:
+            try:
+                big_res = r.find("div", {'class', "big-results"}).find_all("a", {"class": "a-reset"})
 
-                try:
-                    rating = len(big_res.find_all('i', {'class': 'fa fa-star star'}))
-                except AttributeError:
-                    rating = 0
+                for res in big_res:
 
-                match_id = res['href'].split('/', 3)[2]
-                teams = res.find_all('td', class_='team-cell')
-                team1 = teams[0].get_text().strip()
-                team2 = teams[1].get_text().strip()
+                    try:
+                        rating = len(big_res.find_all('i', {'class': 'fa fa-star star'}))
+                    except AttributeError:
+                        rating = 0
 
-                event = res.find('span', class_='event-name').text
+                    match_id = res['href'].split('/', 3)[2]
+                    teams = res.find_all('td', class_='team-cell')
+                    team1 = teams[0].get_text().strip()
+                    team2 = teams[1].get_text().strip()
 
-                scores = res.find("td", class_="result-score").text.strip().split('-')
-                s_t1 = scores[0].strip()
-                s_t2 = scores[1].strip()
+                    event = res.find('span', class_='event-name').text
 
-                results.append({
-                    'id': match_id,
-                    'team1': team1,
-                    'team2': team2,
-                    'score1': s_t1,
-                    'score2': s_t2,
-                    'rating': rating,
-                    'event': event,
-                })
+                    scores = res.find("td", class_="result-score").text.strip().split('-')
+                    s_t1 = scores[0].strip()
+                    s_t2 = scores[1].strip()
+
+                    results.append({
+                        'id': match_id,
+                        'team1': team1,
+                        'team2': team2,
+                        'score1': s_t1,
+                        'score2': s_t2,
+                        'rating': rating,
+                        'event': event,
+                    })
+            except AttributeError:
+                pass
 
         if regular:
 
@@ -496,6 +534,8 @@ class Hltv:
                 if i > days: break
 
                 date_ = self.__normalize_date(date_div.find('span', class_='standard-headline').text)
+                date = self._localize_datetime_to_timezone(date_str=date_).strftime('%d-%m-%Y')
+
                 for res in date_div.find_all("a", {"class": "a-reset"}):
                     if res['href'] == '/forums' or n > max:
                         break
@@ -522,7 +562,7 @@ class Hltv:
 
                         results.append({
                             'id': match_id,
-                            'date': date_,
+                            'date': date,
                             'team1': team1,
                             'team2': team2,
                             'score1': s_t1,
@@ -547,7 +587,9 @@ class Hltv:
                 r.find("div", {'class', 'results-holder'}).find_all("div", {'class', 'results-sublist'}), start=1):
             if i > days or n > max_:
                 break
-            date = self.__normalize_date(result.find("span", class_="standard-headline").text.strip())
+            date_ = self.__normalize_date(result.find("span", class_="standard-headline").text.strip())
+            date = self._localize_datetime_to_timezone(date_str=date_).strftime("%d-%m-%Y")
+
             for match in result.find_all("a", class_="a-reset"):
                 if n > max_:
                     break
@@ -560,7 +602,7 @@ class Hltv:
                 score_t1 = scores[0].strip()
                 score_t2 = scores[1].strip()
 
-                # add team ids?
+                # TODO add team ids
                 match_results.append({
                     'id': id_,
                     'date': date,
@@ -611,7 +653,7 @@ class Hltv:
             })
 
         for date_sect in r.find_all('div', {'class': 'upcomingMatchesSection'}):
-            date_ = date_sect.find('span', {'class': 'matchDayHeadline'}).text.split(' ')[-1]
+            date_ = datetime.strptime(date_sect.find('span', {'class': 'matchDayHeadline'}).text.split(' ')[-1], "%Y-%m-%d")
             for match in date_sect.find_all('div', {'class': 'upcomingMatch'}):
                 teams_ = match.find_all("div", class_="matchTeamName text-ellipsis")
                 id_ = match.find('a')['href'].split('/')[2]
@@ -640,6 +682,7 @@ class Hltv:
 
         return matches
 
+    #DELETE ?
     async def get_featured_events(self, max_: int = 1):
         r = await self._fetch('https://www.hltv.org/events')
 
@@ -986,9 +1029,8 @@ class Hltv:
 
 
 async def main():
-    hltv = Hltv()
-    print(await hltv.get_matches(live=False))
-    print(await hltv.get_match_info(2371706, 'Guild Eagles', 'sangal', 'CCT Season 2 Europe Series 1'))
+    hltv = Hltv(tz='UT234C')
+    print(await hltv.get_match_info(2371594, '3DMAX', 'Guild-Eagles', 'YaLLa-Compass-Spring-2024'))
 
 if __name__ == '__main__':
     asyncio.run(main())
