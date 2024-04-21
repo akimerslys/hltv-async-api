@@ -26,12 +26,11 @@ class Hltv:
                  max_retries: int = 0,
                  proxy_protocol: str | None = None,
                  proxy_one_time: bool = False,
-                 one_time_session: bool = True,
                  ):
         self.headers = {
             "referer": "https://www.hltv.org/stats",
             "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            "hltvTimeZone": "UTC"
+            "hltvTimeZone": "Europe/Copenhagen"     # TODO Timezone settings???
         }
         self.MAX_DELAY = max_delay
         self.timeout = timeout
@@ -50,7 +49,7 @@ class Hltv:
                     self.PROXY_LIST = [line.strip() for line in file.readlines()]
 
         if self.PROXY_PROTOCOL:
-            self.PROXY_LIST = [self.PROXY_PROTOCOL + '://' + proxy[i] for i, proxy in enumerate(self.PROXY_LIST, start=0)]
+            self.PROXY_LIST = [self.PROXY_PROTOCOL + '://' + proxy for i, proxy in enumerate(self.PROXY_LIST, start=0)]
 
         if proxy_path or proxy_list:
             self.USE_PROXY = True
@@ -140,7 +139,7 @@ class Hltv:
         page = self._f(result)
         challenge_page = page.find(id="challenge-error-title")
         if challenge_page is not None:
-            if "Enable JavaScript and cookies to continue" in challenge_page.get_text():
+            if "Enable JavaScript and cookies to continue" in challenge_page.get_text().strip():
                 self.logger.debug("Got cloudflare challenge page")
                 return True
         return False
@@ -360,12 +359,38 @@ class Hltv:
                               f"{event_title.replace(' ', '-')}")
         if not r:
             return
+        status_ = {'Match over': 0, 'LIVE': 1}
 
         status = r.find('div', {'class': 'countdown'}).text
 
+        status_int = status_[status] if status in status_ else 2
+
+        if status_int == 2:
+            components = status.split(" : ")
+
+            days, hours, minutes, seconds = 0, 0, 0, 0
+
+            for component in components:
+                if 'd' in component:
+                    days = int(component.replace("d", ""))
+                elif 'h' in component:
+                    hours = int(component.replace("h", ""))
+                elif 'm' in component:
+                    minutes = int(component.replace("m", ""))
+                elif 's' in component:
+                    seconds = int(component.replace("s", ""))
+
+            date_ = datetime.now(tz=pytz.timezone('Europe/Copenhagen')) + timedelta(days=days,
+                                                                                         hours=hours,
+                                                                                         minutes=minutes,
+                                                                                         seconds=seconds)
+
+            status = date_.strftime('%d-%m-%Y-%H-%M')
+
+
         score1, score2 = 0, 0
 
-        if status == 'Match over':
+        if status_int == 0:
             scores = r.find_all('div', class_='team')
             score1 = scores[0].get_text().replace('\n', '')[-1]
             score2 = scores[1].get_text().replace('\n', '')[-1]
@@ -384,7 +409,7 @@ class Hltv:
             maps.append({'mapname': mapname, 'r_team1': r_team1, 'r_team2': r_team2})
 
         stats_ = []
-        if stats and status == 'Match over':
+        if stats and status_int == 0:
             for table_div in r.find_all('table', {'class': 'table totalstats'})[:2]:
                 for player in table_div.find_all('tr')[1:]:
                     player_id = player.find('a', class_='flagAlign')['href'].split('/')[2]
@@ -402,17 +427,18 @@ class Hltv:
                         'rating': rating
                     })
 
-        if status == "LIVE":
+        if status_int == 1:
             for map in maps:
+                len_ = len(map)
                 if map["r_team1"] == '13':
-                    if len(map) != 1:
+                    if len_ != 1:
                         score1 += 1
                     else:
                         score1 = 13
                         score2 = int(map["r_team2"])
 
                 elif map["r_team1"] == '13':
-                    if len(map) != 1:
+                    if len_ != 1:
                         score2 += 1
                     else:
                         score2 = 13
@@ -642,7 +668,7 @@ class Hltv:
 
         return events
 
-    async def get_events(self, featured=True, outgoing=True, future=True, max_events=10):
+    async def get_events(self, outgoing=True, future=True, max_events=10):
         """Returns events
         :params:
         outgoing - include live tournaments
@@ -961,7 +987,8 @@ class Hltv:
 
 async def main():
     hltv = Hltv()
-    print(await hltv.get_matches())
+    print(await hltv.get_matches(live=False))
+    print(await hltv.get_match_info(2371706, 'Guild Eagles', 'sangal', 'CCT Season 2 Europe Series 1'))
 
 if __name__ == '__main__':
     asyncio.run(main())

@@ -106,7 +106,7 @@ pip install hltv-async-api
     
     ```
 
-* **get_match_info(match_id: int | str, team1, team2, event_title)
+* **get_match_info(match_id: int | str, team1, team2, event_title)**
   
     ```
     await hltv.get_match_info(2370931, 'Mouz', 'faze', 'iem-chengdu-2024')  
@@ -117,7 +117,7 @@ pip install hltv-async-api
     
     ```
   
-* **get_results(days: int = 1, min_rating: int = 1, max: int = 30, featured: bool = True, regular: bool = True)) ->
+* **get_results(days: int = 1, min_rating: int = 1, max: int = 30, featured: bool = True, regular: bool = True)) ->**
     
     ```
     print(await hltv.get_results())
@@ -198,7 +198,6 @@ pip install hltv-async-api
 
 * **get(type: str, id: int | str | None = None, title: str | None = None, team1: str | None = None, team2: str | None = None):**
   (BETA) This method is not finished. Possible types 'events', 'matches', 'teams', also u can add id | title | team1 | team2, to parse more.
-  ex. 
   
   ```
   
@@ -317,7 +316,7 @@ if __name__ == "__main__":
     
     
     async def startup(ctx):
-        ctx["hltv"] = Hltv(max_delay=5, use_proxy=True, proxy_list=[settings.PROXY_MAIN, ''], true_session=True, debug=True)
+        ctx["hltv"] = Hltv(max_delay=5, use_proxy=True, proxy_path='proxies.txt', debug=True)
         ctx["redis"] = redis_client = Redis(
             connection_pool=ConnectionPool.from_url(settings.redis_url),
         )
@@ -397,6 +396,22 @@ if __name__ == "__main__":
         ]
 
     ```
+
+# Tests:
+
+**<a href='https://github.com/akimerslys/hltv-async-api/blob/main/test/hard_test.py'>To test library you can use temporarily test file</a>**
+
+```
+
+Parsed 15 matches.(17s) ERRORS: 0/15
+Parsed 13 events.(28s) ERRORS: 0/13
+Parsed 31 teams.(41s) ERRORS: 0/31
+ERRORS=0
+SUCCESS=64
+Total parsed=64
+Total time 40.8259
+
+```
 
 # Requirements:
 
