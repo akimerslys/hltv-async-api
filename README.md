@@ -1,13 +1,13 @@
 # hltv-async-api an unofficial asynchronous HLTV API Wrapper for Python
 
 
-**This page not completed, not all methods and configs are written**
+**This page is not completed, not all methods and configs are written**
 
 
 # Features
 
 
-* **Simple Usage** (its realy simple)
+* **Simple Usage** (its really simple)
 
 
 * **New and modern fully async library**
@@ -52,7 +52,7 @@ pip install hltv-async-api
     
     hltv = Hltv()
     print(await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
-    await hltv.close_session()
+    await hltv.close()
 
     ```
 
@@ -76,12 +76,12 @@ pip install hltv-async-api
     ```
 
 
-**One-time proxy**
+**Delete proxy**
 
-    removes bad proxies from list
+    Removes bad proxies
     
     ```
-    hltv = Hltv(proxy_path='PATH_TO_PROXY.TXT', proxy_one_time=True)
+    hltv = Hltv(proxy_path='PATH_TO_PROXY.TXT', delete_proxy=True)
     ```
 
 **Protocol usage**
@@ -257,9 +257,9 @@ pip install hltv-async-api
 
     Proxy protocol. Your proxies ```hltv = Hltv(proxy_protocol='http' ...) -> '11.11.11.11:1111' -> 'http://11.11.11.11:1111'
 
-* proxy_one_time: bool = False
+* delete_proxy: bool = False
 
-    Removes proxy from list (proxy_path included) if connection unsuccessfull
+    Removes proxy from list (proxy_path included) if connection unsuccessfully
 
 * timeout: int = 5
 
@@ -300,7 +300,7 @@ from hltv_async_api import Hltv
 
 async def test():
 
-    hltv = Hltv(debug=True, use_proxy=True, proxy_path='proxy_test.txt', timeout=1, proxy_one_time=True, proxy_protocol='http')
+    hltv = Hltv(debug=True, use_proxy=True, proxy_path='proxy_test.txt', timeout=1, delete_proxy=True, proxy_protocol='http')
     
     print(await hltv.get_event_info(7148, 'pgl-cs2-major-copenhagen-2024'))
 
@@ -323,15 +323,15 @@ if __name__ == "__main__":
     
     
     async def startup(ctx):
-        ctx["hltv"] = Hltv(max_delay=5, use_proxy=True, proxy_path='proxies.txt', debug=True)
+        async with Hltv(max_delay=5, use_proxy=True, proxy_path='proxies.txt', debug=True) as hltv:
+              ctx["hltv"] = hltv
+  
         ctx["redis"] = redis_client = Redis(
-            connection_pool=ConnectionPool.from_url(settings.redis_url),
-        )
+            connection_pool=ConnectionPool.from_url(settings.redis_url))
         logger.success(f"Scheduler started. UTC time {datetime.utcnow()}")
     
     
     async def shutdown(ctx):
-        await ctx["hltv"].close_session()
         await ctx["redis"].close()
     
     

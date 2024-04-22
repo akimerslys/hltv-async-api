@@ -2,10 +2,10 @@ from setuptools import setup, find_packages
 
 setup(
     name='hltv_async_api',
-    version='0.6.5b',
+    version='0.6.5',
     author='akimerslys',
     author_email='akimslys2003@gmail.com',
-    description='Hltv-aio: An unofficial asynchronous HLTV API Wrapper for Python',
+    description='An unofficial asynchronous HLTV API Wrapper for Python',
     long_description=open('README.md').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/akimerslys/aiohltv',

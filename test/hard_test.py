@@ -164,8 +164,8 @@ class HltvHardTest:
 
 @pytest.mark.asyncio
 async def main():
-    hltv = Hltv()
-    test = HltvHardTest(hltv=hltv)
+    hltv = Hltv(debug=True)
+    test = HltvHardTest(hltv=hltv, debug=True)
     await test.start_test()
 
 

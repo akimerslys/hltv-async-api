@@ -1,19 +1,14 @@
+import pytz
+import asyncio
+import re
+import logging
 from typing import Any, List
 from datetime import date, datetime, timedelta
-import pytz
-
 from bs4 import BeautifulSoup
-import asyncio
-from asyncio import get_running_loop
 from functools import partial
-
 from aiohttp import ClientSession, ClientTimeout
 from aiohttp.client_exceptions import ClientProxyConnectionError, ClientResponseError, ClientOSError, \
     ServerDisconnectedError, ClientHttpProxyError
-import re
-
-import logging
-
 
 class Hltv:
     def __init__(self, max_delay: int = 15,
@@ -23,7 +18,7 @@ class Hltv:
                  debug: bool = False,
                  max_retries: int = 0,
                  proxy_protocol: str | None = None,
-                 proxy_one_time: bool = False,
+                 delete_proxy: bool = False,
                  tz: str = 'Europe/Copenhagen',
                  ):
         self.headers = {
@@ -45,7 +40,7 @@ class Hltv:
         self.PROXY_PATH = proxy_path
         self.PROXY_LIST = proxy_list
         self.PROXY_PROTOCOL = proxy_protocol
-        self.PROXY_ONCE = proxy_one_time
+        self.PROXY_ONCE = delete_proxy
 
         if self.PROXY_PATH:
             with open(self.PROXY_PATH, "r") as file:
@@ -91,7 +86,7 @@ class Hltv:
                debug: bool | None = None,
                max_retries: int | None = None,
                proxy_protocol: str | None = None,
-               proxy_one_time: bool | None = None,
+               delete_proxy: bool | None = None,
                tz: str = None,
                ):
         if max_delay:
@@ -106,8 +101,8 @@ class Hltv:
             self.max_retries = max_retries
         if proxy_protocol:
             self.PROXY_PROTOCOL = proxy_protocol
-        if proxy_one_time is not None:
-            self.PROXY_ONCE = proxy_one_time
+        if delete_proxy is not None:
+            self.PROXY_ONCE = delete_proxy
         if tz is not None:
             self.TIMEZONE = tz
             self._check_tz()
@@ -203,7 +198,7 @@ class Hltv:
         try_ = 1
         result = None
 
-        # parse until success or not maxretries
+        # parse until success or not max retries
         while (not status) and (try_ != self.max_retries):
             self.logger.debug(f'Trying connect to {url}, try {try_}/{self.max_retries}')
 
@@ -216,7 +211,7 @@ class Hltv:
             try_ += 1
 
         if status:
-            loop = get_running_loop()
+            loop = asyncio.get_running_loop()
             parsed = await loop.run_in_executor(None, partial(self._f, result))
             return parsed
         else:
@@ -360,7 +355,7 @@ class Hltv:
                             matches.append({
                                 'id': id_,
                                 'date': dtime.strftime('%d-%m-%Y'),
-                                'time': dtime.strftime('%d-%m-%Y'),
+                                'time': dtime.strftime('%H:%M'),
                                 'team1': team1,
                                 'team2': team2,
                                 't1_id': t1_id,
@@ -653,7 +648,8 @@ class Hltv:
             })
 
         for date_sect in r.find_all('div', {'class': 'upcomingMatchesSection'}):
-            date_ = datetime.strptime(date_sect.find('span', {'class': 'matchDayHeadline'}).text.split(' ')[-1], "%Y-%m-%d")
+            date_ = datetime.strptime(date_sect.find('span', {'class': 'matchDayHeadline'}).text.split(' ')[-1],
+                                      "%Y-%m-%d")
             for match in date_sect.find_all('div', {'class': 'upcomingMatch'}):
                 teams_ = match.find_all("div", class_="matchTeamName text-ellipsis")
                 id_ = match.find('a')['href'].split('/')[2]
