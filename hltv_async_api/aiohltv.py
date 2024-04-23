@@ -10,6 +10,7 @@ from aiohttp import ClientSession, ClientTimeout
 from aiohttp.client_exceptions import ClientProxyConnectionError, ClientResponseError, ClientOSError, \
     ServerDisconnectedError, ClientHttpProxyError
 
+
 class Hltv:
     def __init__(self, max_delay: int = 15,
                  timeout: int = 5,
@@ -55,10 +56,7 @@ class Hltv:
             self.USE_PROXY = False
 
         self.session = None
-
-    def _configure_logging(self):
-        level = logging.DEBUG if self.DEBUG else logging.INFO
-        logging.basicConfig(level=level, format="%(message)s")
+        self.loop = asyncio.get_running_loop()
 
     async def __aenter__(self):
         await self._create_session()
@@ -77,6 +75,10 @@ class Hltv:
             self.logger.debug('Closing Session')
             await self.session.close()
             self.session = None
+
+    def _configure_logging(self):
+        level = logging.DEBUG if self.DEBUG else logging.INFO
+        logging.basicConfig(level=level, format="%(message)s")
 
     def config(self, max_delay: int | None = None,
                timeout: int | None = None,
@@ -141,12 +143,11 @@ class Hltv:
     def _f(result):
         return BeautifulSoup(result, "lxml")
 
-    def _cloudflare_check(self, result) -> bool:
-        page = self._f(result)
+    def _cloudflare_check(self, page) -> bool:
         challenge_page = page.find(id="challenge-error-title")
         if challenge_page is not None:
             if "Enable JavaScript and cookies to continue" in challenge_page.get_text().strip():
-                self.logger.debug("Got crloudflare challenge page")
+                self.logger.debug("Got cloudflare challenge page")
                 return True
         return False
 
@@ -168,27 +169,30 @@ class Hltv:
         if self.USE_PROXY:
             proxy = self._get_proxy()
         else:
-            # delay, only for non proxy users. (default = 1-15s)
+            # delay, only for non-proxy users. (default = 1-15s)
             await asyncio.sleep(delay)
         try:
-            async with self.session.get(url, headers=self.headers, proxy=proxy, timeout=self.timeout, ) as response:
+            async with self.session.get(url, headers=self.headers, proxy=proxy, timeout=self.timeout) as response:
                 self.logger.info(f"Fetching {url}, code: {response.status}")
                 if response.status == 403 or response.status == 404:
                     self.logger.debug("Got 403 forbitten")
-                    return False, self._parse_error_handler(delay)
+                    return False, await self.loop.run_in_executor(None, partial(self._parse_error_handler, delay))
+                    #return False, self._parse_error_handler(delay)
 
                 # checking for challenge page.
                 result = await response.text()
-                if await self._cloudflare_check(result):
-                    return False, self._parse_error_handler(delay)
+                page = await self.loop.run_in_executor(None, partial(self._f, result))
+                forbitten = await self.loop.run_in_executor(None, partial(self._cloudflare_check, page))
+                #forbitten, parsed = self._cloudflare_check(result)
+                if forbitten:
+                    return False, await self.loop.run_in_executor(None, partial(self._parse_error_handler, delay))
+                    #return False, self._parse_error_handler(delay)
 
-                return True, result
+                return True, page
         except (ClientProxyConnectionError, ClientResponseError, ClientOSError,
-                ServerDisconnectedError, TimeoutError, ClientHttpProxyError) as e:
+                ServerDisconnectedError, TimeoutError, ClientHttpProxyError, ClientTimeout) as e:
             self.logger.debug(e)
             delay = self._parse_error_handler(delay)
-            return False, delay
-        except ClientTimeout:
             return False, delay
 
     async def _fetch(self, url, delay: int = 0):
@@ -211,9 +215,7 @@ class Hltv:
             try_ += 1
 
         if status:
-            loop = asyncio.get_running_loop()
-            parsed = await loop.run_in_executor(None, partial(self._f, result))
-            return parsed
+            return result
         else:
             self.logger.error('Connection failed')
             return None
@@ -245,7 +247,7 @@ class Hltv:
         if date_.tzinfo:
             return date_.astimezone(pytz.timezone(self.TIMEZONE))
         else:
-            return date_.replace(tzinfo=pytz.timezone('Europe/Copenhagen')).astimezone(pytz.timezone(self.TIMEZONE))
+            return pytz.timezone('Europe/Copenhagen').localize(date_).astimezone(pytz.timezone(self.TIMEZONE))
 
     async def get(self, type: str, id: int | str | None = None,
                   title: str | None = None,
@@ -1032,8 +1034,8 @@ class Hltv:
 
 
 async def main():
-    async with Hltv(tz='UT234C') as hltv:
-        print(await hltv.get_match_info(2371713, 'insilio', 'eyeballers', 'cct-season-2-europe-series-1'))
+    async with Hltv(proxy_path='proxies.txt', proxy_protocol='http', debug=True) as hltv:
+        print(await hltv.get_matches())
 
 if __name__ == '__main__':
     asyncio.run(main())

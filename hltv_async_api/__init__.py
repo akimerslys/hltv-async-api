@@ -6,4 +6,4 @@
 from .aiohltv import Hltv
 
 __author__ = 'akimerslys'
-__version__ = '0.6.6'
+__version__ = '0.7.0'

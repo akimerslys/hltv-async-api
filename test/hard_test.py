@@ -164,9 +164,9 @@ class HltvHardTest:
 
 @pytest.mark.asyncio
 async def main():
-    hltv = Hltv(debug=True)
-    test = HltvHardTest(hltv=hltv, debug=True)
-    await test.start_test()
+    async with Hltv(debug=True, proxy_path='proxies.txt', proxy_protocol='http') as hltv:
+        test = HltvHardTest(hltv=hltv, debug=True)
+        await test.start_test()
 
 
 if __name__ == '__main__':
