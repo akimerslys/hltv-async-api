@@ -141,12 +141,12 @@ class Hltv:
     def _f(result):
         return BeautifulSoup(result, "lxml")
 
-    async def _cloudflare_check(self, result) -> bool:
+    def _cloudflare_check(self, result) -> bool:
         page = self._f(result)
         challenge_page = page.find(id="challenge-error-title")
         if challenge_page is not None:
             if "Enable JavaScript and cookies to continue" in challenge_page.get_text().strip():
-                self.logger.debug("Got cloudflare challenge page")
+                self.logger.debug("Got crloudflare challenge page")
                 return True
         return False
 
@@ -458,20 +458,26 @@ class Hltv:
 
         if status_int == 1:
             for map in maps:
-                len_ = len(map)
-                if map["r_team1"] == '13':
-                    if len_ != 1:
-                        score1 += 1
-                    else:
-                        score1 = 13
-                        score2 = int(map["r_team2"])
+                try:
+                    if map["r_team1"].isdigit() and map["r_team2"].isdigit():
+                        len_ = len(map)
+                        s1, s2 = int(map["r_team1"]), int(map["r_team2"])
+                        if s1 > 12 and s1 > s2:
+                            if len_ != 1:
+                                score1 += 1
+                            else:
+                                score1 = s1
+                                score2 = s2
 
-                elif map["r_team1"] == '13':
-                    if len_ != 1:
-                        score2 += 1
-                    else:
-                        score2 = 13
-                        score1 = int(map["r_team1"])
+                        elif s2 > 12 and s2 > s1:
+                            if len_ != 1:
+                                score2 += 1
+                            else:
+                                score2 = s2
+                                score1 = s1
+
+                except ValueError:
+                    pass
 
         return {'id': match_id, 'score1': score1, 'score2': score2, 'status': status, 'maps': maps, 'stats': stats_}
 
@@ -588,6 +594,7 @@ class Hltv:
             for match in result.find_all("a", class_="a-reset"):
                 if n > max_:
                     break
+
                 id_ = match['href'].split('/')[2]
                 teams = match.find_all("div", class_="team")
                 team1 = teams[0].text.strip()
@@ -618,7 +625,7 @@ class Hltv:
         matches = []
         try:
             live_matches = r.find("div", {'class', 'liveMatchesSection'}).find_all("div",
-                                                                                   {'class', 'liveMatch-container'})
+                                                     {'class', 'liveMatch-container'})
         except AttributeError:
             live_matches = []
         for live in live_matches:
@@ -1025,8 +1032,8 @@ class Hltv:
 
 
 async def main():
-    hltv = Hltv(tz='UT234C')
-    print(await hltv.get_match_info(2371594, '3DMAX', 'Guild-Eagles', 'YaLLa-Compass-Spring-2024'))
+    async with Hltv(tz='UT234C') as hltv:
+        print(await hltv.get_match_info(2371713, 'insilio', 'eyeballers', 'cct-season-2-europe-series-1'))
 
 if __name__ == '__main__':
     asyncio.run(main())

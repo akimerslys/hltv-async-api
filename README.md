@@ -216,7 +216,7 @@ pip install hltv-async-api
     We automaticly increasing reconnecting delay by 1 sec to max_delay (from 1s to 5s)
 
     ```
-    hltv = Hltv(max_delay=5, use_proxy=False)
+    hltv = Hltv(max_delay=5)
     
     >>>Fetching https://www.hltv.org/matches/2370727/faze-vs-natus-vincere-pgl-cs2-major-copenhagen-2024, code: 403
     >>>Got 403 forbitten
@@ -239,10 +239,6 @@ pip install hltv-async-api
     Trying connect to https://www.hltv.org/stats/players?startDate=2024-01-01&endDate=2024-12-31&rankingFilter=Top20, try 2/2
     Connection failed
     ```
-
-* use_proxy: bool = False
-
-    Proxy Usage. No compatibility with max_delay (max_delay will be ignored)
 
 * proxy_list: list | None = None
 
@@ -300,7 +296,7 @@ from hltv_async_api import Hltv
 
 async def test():
 
-    hltv = Hltv(debug=True, use_proxy=True, proxy_path='proxy_test.txt', timeout=1, delete_proxy=True, proxy_protocol='http')
+    hltv = Hltv(debug=True, proxy_path='proxy_test.txt', timeout=1, delete_proxy=True, proxy_protocol='http')
     
     print(await hltv.get_event_info(7148, 'pgl-cs2-major-copenhagen-2024'))
 
@@ -323,7 +319,7 @@ if __name__ == "__main__":
     
     
     async def startup(ctx):
-        async with Hltv(max_delay=5, use_proxy=True, proxy_path='proxies.txt', debug=True) as hltv:
+        async with Hltv(max_delay=5, proxy_path='proxies.txt', debug=True) as hltv:
               ctx["hltv"] = hltv
   
         ctx["redis"] = redis_client = Redis(
