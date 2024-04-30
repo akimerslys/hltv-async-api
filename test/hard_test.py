@@ -44,7 +44,7 @@ class HltvHardTest:
 
         await asyncio.gather(
             self.parse_and_assert(self.parse_events()),
-            self.parse_and_assert(self.parse_matches()),
+            self.parse_and_assert(self.parse_matches_results()),
             self.parse_and_assert(self.parse_last_news()),
             self.parse_and_assert(self.parse_top_players()),
             self.parse_and_assert(self.parse_top_teams()),
@@ -53,6 +53,7 @@ class HltvHardTest:
         self.logger.info(self.matches)
         self.logger.info(self.events)
         self.logger.info(self.teams)
+        self.logger.info(self.players)
         self.logger.info(f'ERRORS={self.errors}')
         self.logger.info(f'SUCCESS={self.success}')
         self.logger.info(f'Total parsed={self.success + self.errors}')
@@ -60,29 +61,42 @@ class HltvHardTest:
 
         assert self.errors == 0
 
-    async def parse_matches(self):
+    async def parse_matches_results(self):
         start_time = time.time()
-        tot = 1
+        tot = 2
         err = 0
         self.logger.info('Parsing matches')
-        matches = await self.hltv.get_matches(1, 1)
+        matches = await self.hltv.get_matches(7, 0)
+        if not matches:
+            err += 1
+            self.logger.error('ERROR PARSING MATCHES')
+        self.logger.info('Parsing matches')
+        results = await self.hltv.get_results(7, 0, 100)
+        if not results:
+            err += 1
+            self.logger.error('ERROR PARSING RESULTS')
+        matches = matches + results
         if matches:
             self.success += 1
-            logging.debug(matches)
+            self.logger.debug(matches)
             for match in matches:
                 tot += 1
                 match_: Any = None
-                try:
-                    match_ = await self.hltv.get_match_info(match["id"], match['team1'], match['team2'], match['event'])
-                except BaseException:
-                    pass
+                self.logger.debug(match)
+                if match['team1'] != 'TBD' and match['id'] != '0' and match['id'] != 0:
+                    try:
+                        match_ = await self.hltv.get_match_info(match["id"], match['team1'], match['team2'], match['event'])
+                        self.logger.debug(f'match={match_}')
+                    except BaseException as e:
+                        self.logger.error(e)
+                        err += 1
 
-                if match_:
-                    self.logger.debug(match_)
-                    self.success += 1
-                else:
-                    self.errors += 1
-                    err += 1
+                    if match_:
+                        self.logger.debug(match_)
+                        self.success += 1
+                    else:
+                        self.errors += 1
+                        err += 1
         else:
             self.errors += 1
             self.logger.error("error parsing matches")
@@ -94,26 +108,60 @@ class HltvHardTest:
         tot = 1
         err = 0
         self.logger.info('Parsing events')
-        events = await self.hltv.get_events()
+        events = await self.hltv.get_events(max_events=50)
         if events:
             logging.debug(events)
             for event in events:
-                event_: Any = None
-                tot += 1
+                event_, event_matches, event_results = None, None, None
+
                 try:
                     event_ = await self.hltv.get_event_info(event["id"], event["title"])
-                    logging.debug(event_)
-                except BaseException:
-                    pass
+                    logging.debug(f'event={event_}')
 
-                if event_:
-                    self.logger.debug(event_)
-                    self.success += 1
-                else:
+                except BaseException as e:
+                    self.logger.error(e)
+                    self.logger.error(f'TYPE: INFO ID={event["id"]} TITLE={event["title"]}')
                     self.errors += 1
                     err += 1
+                finally:
+                    tot += 1
+
+                if event_:
+                    self.success += 1
+
+                try:
+                    event_matches = await self.hltv.get_event_matches(event['id'], 7)
+                    logging.debug(f'event_matches={event_matches}')
+
+                except BaseException as e:
+                    self.logger.error(e)
+                    self.logger.error(f'TYPE: MATCHES ID={event["id"]} TITLE={event["title"]}')
+                    self.errors += 1
+                    err += 1
+                finally:
+                    tot += 1
+
+                if event_matches:
+                    self.success += 1
+
+                try:
+                    event_results = await self.hltv.get_event_results(event['id'], 7, max_=100)
+                    logging.debug(f'event_results={event_results}')
+
+                except BaseException as e:
+                    self.logger.error(e)
+                    self.logger.error(f'TYPE: RESULTS ID={event["id"]} TITLE={event["title"]}')
+                    self.errors += 1
+                    err += 1
+                finally:
+                    tot += 1
+
+                if event_results:
+                    self.success += 1
+
+
         else:
-            logging.error("error parsing events")
+            logging.critical("error parsing events")
 
         self.events = f'Parsed {tot} events.({round(time.time() - start_time)}s) ERRORS: {err}/{tot}'
 
@@ -130,27 +178,40 @@ class HltvHardTest:
                 team_: Any = None
                 try:
                     team_ = await self.hltv.get_team_info(team["id"], team['title'])
-                except BaseException:
-                    pass
-                if team_:
                     self.success += 1
-                    logging.debug(team_)
-                else:
+                except BaseException as e:
+                    self.logger.error(e)
+                    self.logger.debug(team_)
                     self.errors += 1
                     err += 1
         else:
-            logging.error("error parsing top teams")
+            logging.critical("error parsing top teams")
 
         self.teams = f'Parsed {tot} teams.({round(time.time() - start_time)}s) ERRORS: {err}/{tot}'
 
     async def parse_top_players(self):
-        top_players = await self.hltv.get_best_players(30)
+        start_time = time.time()
+        tot = 1
+        err = 0
+        top_players = await self.hltv.get_top_players(30)
         if top_players:
-            logging.debug(top_players)
             self.success += 1
+            for player in top_players:
+                tot += 1
+                try:
+                    player_ = await self.hltv.get_player_info(player['id'], player['nickname'])
+                    self.success += 1
+                except Exception as e:
+                    self.logger.error(e)
+                    self.logger.debug(player_)
+                    self.errors += 1
+                    err += 1
         else:
-            logging.error('error parsing matches')
+            logging.critical('error parsing players')
             self.errors += 1
+            err = 0
+
+        self.players = f'Parsed {tot} players.({round(time.time() - start_time)}s) ERRORS: {err}/{tot}'
 
     async def parse_last_news(self):
         news = await self.hltv.get_last_news(only_today=True, max_reg_news=4)
@@ -158,7 +219,7 @@ class HltvHardTest:
             logging.debug(news)
             self.success += 1
         else:
-            logging.error('error parsing news')
+            logging.critical('error parsing news')
             self.errors += 1
 
 

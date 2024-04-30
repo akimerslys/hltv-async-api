@@ -1,4 +1,4 @@
-# hltv-async-api an unofficial asynchronous HLTV API Wrapper for Python
+# hltv-async-api an **unofficial** asynchronous HLTV API Wrapper for Python. Use only in non-commercial purposes
 
 
 **This page is not completed, not all methods and configs are written**
@@ -108,7 +108,7 @@ pip install hltv-async-api
     
     ```
 
-* **get_match_info(match_id: int | str, team1, team2, event_title)**
+* **get_match_info(match_id: int | str, team1, team2, event_title, stats: bool = True, predicts: bool = True)**
   
     ```
     await hltv.get_match_info(2370931, 'Mouz', 'faze', 'iem-chengdu-2024')  
@@ -173,7 +173,7 @@ pip install hltv-async-api
     >>>[{'id': '1111', 'rank': '1', 'title': 'FaZe', 'points': '939', 'change': '-', 'id': '6667'}, {'id': '1111', 'rank': '2', 'title': 'Natus Vincere', 'points': '757', 'change': '+4', 'id': '4608'}]
     ```
 
-* **get_team_info(team_id: int | str, title: str) -> (team_id, team_title, rank, [players], coach, average_age, weeks_in_top_20, last_trophy, total_trophys)**
+* **get_team_info(team_id: int | str, title: str) -> (team_id, team_title, rank, {player:player_id}, coach, average_age, weeks_in_top_20, last_trophy, total_trophys)**
 
     ```
     await hltv.get_team_info(6667, 'faze')
@@ -198,6 +198,14 @@ pip install hltv-async-api
     >>>[{'id': '19230', 'rank': 1, 'name': 'm0NESY', 'team': 'G2', 'maps': '44', 'rating': '1.37'}, {'id': '18053', 'rank': 2, 'name': 'broky', 'team': 'FaZe', 'maps': '54', 'rating': '1.19'}]
     ```
 
+* **get_player_info(id: str | int, nickname: str)**
+  
+  ```
+  await hltv.get_player_info(7998, 's1mple')
+  
+  {'id': 7998, 'nickname': 's1mple', 'team': 'Natus Vincere', 'team_id': 4608, 'name': 'Oleksandr Kostyliev', 'nationality': 'Ukraine', 'age': 26, 'rating': '0.94', 'kpr': '0.60', 'hs': '57.9%', 'last_matches': [103059, 99745, 99728, 99696, 99471, 99364], 'last_trophy': 'BLAST Premier Spring Final 2022', 'total_trophies': 30, 'total_mvps': 21}
+  ```
+
 * **get(type: str, id: int | str | None = None, title: str | None = None, team1: str | None = None, team2: str | None = None):**
   (BETA) This method is not finished. Possible types 'events', 'matches', 'teams', also u can add id | title | team1 | team2, to parse more.
   
@@ -213,7 +221,7 @@ pip install hltv-async-api
 
 * max_delay: int = 15
 
-    We automaticly increasing reconnecting delay by 1 sec to max_delay (from 1s to 5s)
+    Automatically increasing reconnecting delay by 1 sec to max_delay (from 1s to 5s)
 
     ```
     hltv = Hltv(max_delay=5)
@@ -406,15 +414,20 @@ if __name__ == "__main__":
 
 ```
 
-Parsed 15 matches.(17s) ERRORS: 0/15
-Parsed 13 events.(28s) ERRORS: 0/13
+Parsed 208 matches.(97s) ERRORS: 0/208
+Parsed 25 events.(23s) ERRORS: 0/25
 Parsed 31 teams.(41s) ERRORS: 0/31
+Parsed 31 players.(28s) ERRORS: 0/31
 ERRORS=0
-SUCCESS=64
-Total parsed=64
-Total time 40.8259
+SUCCESS=284
+Total parsed=284
+Total time 96.8368
 
 ```
+
+# Beta / Unreleased
+
+**That functions were made for myself, before using recommend you to check the file**
 
 # Requirements:
 
