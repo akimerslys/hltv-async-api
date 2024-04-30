@@ -1,4 +1,5 @@
-# hltv-async-api an **unofficial** asynchronous HLTV API Wrapper for Python. Use only in non-commercial purposes
+# hltv-async-api an **unofficial** asynchronous HLTV API Wrapper for Python. 
+# Use only in non-commercial purposes
 
 
 **This page is not completed, not all methods and configs are written**
@@ -56,6 +57,74 @@ pip install hltv-async-api
 
     ```
 
+
+---
+
+# Configs
+
+* max_delay: int = 15
+
+    Automatically increasing reconnecting delay by 1 sec to max_delay (from 1s to 5s)
+
+    ```
+    hltv = Hltv(max_delay=5)
+    
+    >>>Fetching https://www.hltv.org/matches/2370727/faze-vs-natus-vincere-pgl-cs2-major-copenhagen-2024, code: 403
+    >>>Got 403 forbitten
+    >>>Calling again, increasing delay to 4s
+    >>>Fetching https://www.hltv.org/matches/2370727/faze-vs-natus-vincere-pgl-cs2-major-copenhagen-2024, code: 403
+    >>>Got 403 forbitten
+    >>>Calling again, increasing delay to 5s
+    ```
+
+* max_retries: int = 0
+
+    Max retries. 0 or -1 for infinity tries.
+    
+    ```
+    hltv = Hltv(max_retries=2, debug=True)
+    print(await hltv.get_best_players())
+    
+    Creating Session
+    Trying connect to https://www.hltv.org/stats/players?startDate=2024-01-01&endDate=2024-12-31&rankingFilter=Top20, try 1/2
+    Trying connect to https://www.hltv.org/stats/players?startDate=2024-01-01&endDate=2024-12-31&rankingFilter=Top20, try 2/2
+    Connection failed
+    ```
+
+* proxy_list: list | None = None
+
+    list of your proxies, if your proxies doesnt have any protocol you can use proxy_protocol.
+    Note: To add non-proxy to list just put '' to it, you can find example with ar
+
+* proxy_path: str | None = None
+
+    Path to your proxy (proxy_list will be ignored). If your proxies doesnt have any protocol you can use proxy_protocol
+
+* proxy_protocol: str | None = None,
+
+    Proxy protocol. Your proxies ```hltv = Hltv(proxy_protocol='http' ...) -> '11.11.11.11:1111' -> 'http://11.11.11.11:1111'
+
+* delete_proxy: bool = False
+
+    Removes proxy from list (proxy_path included) if connection unsuccessfully
+
+* timeout: int = 5
+
+    Max time to close connection. Recommended to use timeout=1 if you are using random proxies.
+
+* debug: bool = False
+
+* tz: str = 'Europe/Copenhagen':
+    
+    Timezone config. 
+ 
+    <a href='https://gist.github.com/heyalexej/8bf688fd67d7199be4a1682b3eec7568'>Tap here </a> to see all available timezones
+
+* safe_mode: bool = True
+
+    Disallow to wrap restricted data. Switch to False only at your own risk.
+
+
 ---
 
 # Proxy Usage
@@ -93,6 +162,7 @@ pip install hltv-async-api
     ```
 
 ---
+
 # Methods
 
 * **get_matches(days: int = 1, min_star_rating: int = 1, live: bool = True, future: bool = True)**
@@ -216,66 +286,6 @@ pip install hltv-async-api
   >>> (2371201, 0, 0, 'LIVE', [{'mapname': 'Vertigo', 'r_team1': '6', 'r_team2': '13'}, {'mapname': 'Mirage', 'r_team1': '-', 'r_team2': '-'}, {'mapname': 'Anubis', 'r_team1': '-', 'r_team2': '-'}], [])
   
   ```
----
-# Configs
-
-* max_delay: int = 15
-
-    Automatically increasing reconnecting delay by 1 sec to max_delay (from 1s to 5s)
-
-    ```
-    hltv = Hltv(max_delay=5)
-    
-    >>>Fetching https://www.hltv.org/matches/2370727/faze-vs-natus-vincere-pgl-cs2-major-copenhagen-2024, code: 403
-    >>>Got 403 forbitten
-    >>>Calling again, increasing delay to 4s
-    >>>Fetching https://www.hltv.org/matches/2370727/faze-vs-natus-vincere-pgl-cs2-major-copenhagen-2024, code: 403
-    >>>Got 403 forbitten
-    >>>Calling again, increasing delay to 5s
-    ```
-
-* max_retries: int = 0
-
-    Max retries. 0 or -1 for infinity tries.
-    
-    ```
-    hltv = Hltv(max_retries=2, debug=True)
-    print(await hltv.get_best_players())
-    
-    Creating Session
-    Trying connect to https://www.hltv.org/stats/players?startDate=2024-01-01&endDate=2024-12-31&rankingFilter=Top20, try 1/2
-    Trying connect to https://www.hltv.org/stats/players?startDate=2024-01-01&endDate=2024-12-31&rankingFilter=Top20, try 2/2
-    Connection failed
-    ```
-
-* proxy_list: list | None = None
-
-    list of your proxies, if your proxies doesnt have any protocol you can use proxy_protocol.
-    Note: To add nonproxy to list just put '' to it, you can find example with ar
-
-* proxy_path: str | None = None
-
-    Path to your proxy (proxy_list will be ignored). If your proxies doesnt have any protocol you can use proxy_protocol
-
-* proxy_protocol: str | None = None,
-
-    Proxy protocol. Your proxies ```hltv = Hltv(proxy_protocol='http' ...) -> '11.11.11.11:1111' -> 'http://11.11.11.11:1111'
-
-* delete_proxy: bool = False
-
-    Removes proxy from list (proxy_path included) if connection unsuccessfully
-
-* timeout: int = 5
-
-    Max time to close connection. Recommended to use timeout=1 if you are using random proxies.
-
-* debug: bool = False
-
-* tz: str = 'Europe/Copenhagen':
-    
-    Timezone config. 
- 
-    <a href='https://gist.github.com/heyalexej/8bf688fd67d7199be4a1682b3eec7568'>Tap here </a> to see all available timezones
 
 
 ---

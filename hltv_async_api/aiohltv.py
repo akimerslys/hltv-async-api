@@ -21,6 +21,7 @@ class Hltv:
                  proxy_protocol: str | None = None,
                  delete_proxy: bool = False,
                  tz: str | None = None,
+                 safe_mode: bool = True,
                  ):
         self.headers = {
             "referer": "https://www.hltv.org/stats",
@@ -58,6 +59,9 @@ class Hltv:
         self.session = None
         self.loop = asyncio.get_running_loop()
 
+        self.SAFE = safe_mode
+        self._init_SAFE()
+
     async def __aenter__(self):
         self._create_session()
         return self
@@ -89,7 +93,8 @@ class Hltv:
                max_retries: int | None = None,
                proxy_protocol: str | None = None,
                delete_proxy: bool | None = None,
-               tz: str = None,
+               tz: str | None = None,
+               safe_mode: bool | None = None,
                ):
         if max_delay:
             self.MAX_DELAY = max_delay
@@ -114,6 +119,9 @@ class Hltv:
         if proxy_file_path:
             with open(self.PROXY_PATH, "r") as file:
                 self.PROXY_LIST = [line.strip() for line in file.readlines()]
+        if safe_mode is not None:
+            self.SAFE = safe_mode
+            self._init_SAFE()
 
     def _init_tz(self, tz: str | None = None):
         if tz:
@@ -122,6 +130,10 @@ class Hltv:
             except pytz.exceptions.UnknownTimeZoneError:
                 self.logger.error('UnknownTimeZoneError, Using default timezone: Europe/Copenhagen')
                 self.TIMEZONE = None
+
+    def _init_SAFE(self):
+        if not self.SAFE:
+            self.logger.warning('Safe mode deactivated.')
 
     def _get_proxy(self):
         proxy = self.PROXY_LIST[0]
@@ -271,6 +283,11 @@ class Hltv:
 
     async def get_matches(self, days: int = 1, min_rating: int = 1, live: bool = True, future: bool = True):
         """returns a list of all upcoming matches on HLTV"""
+
+        if self.SAFE:
+            self.logger.error('This function is not safe. Switch safe_mode to False to use this function')
+            return
+
         r = await self._fetch("https://www.hltv.org/matches")
         if not r:
             return
@@ -376,6 +393,10 @@ class Hltv:
                              event_title: str,
                              stats: bool = True,
                              predicts: bool = True):
+        if self.SAFE:
+            self.logger.error('This function if SAFE. Switch safe to False to use this function')
+            return
+
         r = await self._fetch(f"https://www.hltv.org/matches/{str(id)}/"
                               f"{team1.replace(' ', '-')}-vs-"
                               f"{team2.replace(' ', '-')}-"
@@ -505,6 +526,11 @@ class Hltv:
                           featured: bool = True,
                           regular: bool = True) -> list[dict[str, Any]] | None:
         """returns a list of big event matches results"""
+
+        if self.SAFE:
+            self.logger.error('This function if SAFE. Switch safe to False to use this function')
+            return
+
         r = await self._fetch("https://www.hltv.org/results")
         if not r:
             return
@@ -597,6 +623,11 @@ class Hltv:
 
     async def get_event_results(self, event_id: int | str, days: int = 1, max_: int = 10) -> list[
                                                                                                  dict[str, Any]] | None:
+
+        if self.SAFE:
+            self.logger.error('This function if SAFE. Switch safe to False to use this function')
+            return
+
         r = await self._fetch("https://www.hltv.org/results?event=" + str(event_id))
         if not r:
             return
@@ -947,7 +978,7 @@ class Hltv:
         except AttributeError:
             raise AttributeError("Parsing error, probably page not fully loaded")
 
-    async def get_top_players(self, top=40):
+    async def get_top_players(self, top: int = 40, year: str | int = datetime.strftime(datetime.utcnow(), '%Y')):
         """
         returns a list of the top (1-40) players in top 20 at the year
         :params:
@@ -956,7 +987,10 @@ class Hltv:
         ('rank', 'name', 'team', 'maps', 'rating')
         maps - maps played
         """
-        year = datetime.strftime(datetime.utcnow(), '%Y')
+        if self.SAFE:
+            self.logger.error('This function is not safe. Switch safe_mode to False to use this function')
+            return
+
         r = await self._fetch(
             f"https://www.hltv.org/stats/players?startDate={year}-01-01&endDate={year}-12-31&rankingFilter=Top20")
 
@@ -1127,7 +1161,7 @@ class Hltv:
 
 async def main():
     async with Hltv(proxy_path='proxies.txt', proxy_protocol='http', debug=True) as hltv:
-        print(await hltv.get_player_info(7998, 's1mple'))
+        print(await hltv.get_top_players())
 
 
 if __name__ == '__main__':
