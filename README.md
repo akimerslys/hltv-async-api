@@ -1,8 +1,13 @@
-# hltv-async-api an **unofficial** asynchronous HLTV API Wrapper for Python. 
-# Use only in non-commercial purposes
+# hltv-async-api an **unofficial** asynchronous HLTV API Wrapper for Python.
 
+### star pls
 
-**This page is not completed, not all methods and configs are written**
+# Future
+
+### 0.8 more event info data (winners, stats, groups, teams), refactor last_matches in player_info. Optimize proxy functions. Coverage. (?) Rotating user agent (exp. till 20.05)
+### 0.9.0 stats & images update, more stats scrapers, team logos, player photos, images, more data, team_map stats, map stats, more functions such as get_news_id, get_team_logo, get_player_photo, get_demo_id, get_match_stats...
+### 0.10.0 synchronous update, reformatting the library as a synchronous, move async parser as an extension. (JULY-AUGUST 2024)
+### 0.11.0 ...
 
 
 # Features
@@ -77,9 +82,9 @@ pip install hltv-async-api
     >>>Calling again, increasing delay to 5s
     ```
 
-* max_retries: int = 0
+* max_retries: int = 10
 
-    Max retries. 0 or -1 for infinity tries.
+    0 for infinity retries
     
     ```
     hltv = Hltv(max_retries=2, debug=True)
@@ -93,18 +98,18 @@ pip install hltv-async-api
 
 * proxy_list: list | None = None
 
-    list of your proxies, if your proxies doesnt have any protocol you can use proxy_protocol.
+    automatic rotating proxies, if your proxies doesnt have any protocol you can use proxy_protocol.
     Note: To add non-proxy to list just put '' to it, you can find example with ar
 
 * proxy_path: str | None = None
 
-    Path to your proxy (proxy_list will be ignored). If your proxies doesnt have any protocol you can use proxy_protocol
+    Path to your proxy (proxy_list will be ignored). If your proxies doesn't have any protocol you can use proxy_protocol
 
 * proxy_protocol: str | None = None,
 
     Proxy protocol. Your proxies ```hltv = Hltv(proxy_protocol='http' ...) -> '11.11.11.11:1111' -> 'http://11.11.11.11:1111'
 
-* delete_proxy: bool = False
+* remove_proxy: bool = False
 
     Removes proxy from list (proxy_path included) if connection unsuccessfully
 
@@ -145,12 +150,12 @@ pip install hltv-async-api
     ```
 
 
-**Delete proxy**
+**Remove proxy**
 
     Removes bad proxies
     
     ```
-    hltv = Hltv(proxy_path='PATH_TO_PROXY.TXT', delete_proxy=True)
+    hltv = Hltv(proxy_path='PATH_TO_PROXY.TXT', remove_proxy=True)
     ```
 
 **Protocol usage**
@@ -314,7 +319,7 @@ from hltv_async_api import Hltv
 
 async def test():
 
-    hltv = Hltv(debug=True, proxy_path='proxy_test.txt', timeout=1, delete_proxy=True, proxy_protocol='http')
+    hltv = Hltv(debug=True, proxy_path='proxy_test.txt', timeout=1, remove_proxy=True, proxy_protocol='http')
     
     print(await hltv.get_event_info(7148, 'pgl-cs2-major-copenhagen-2024'))
 
@@ -437,7 +442,7 @@ Total time 96.8368
 
 # Beta / Unreleased
 
-**That functions were made for myself, before using recommend you to check the file**
+from hltv_async_api.unreleased import Unreleased
 
 # Requirements:
 

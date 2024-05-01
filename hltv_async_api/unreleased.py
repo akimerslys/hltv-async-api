@@ -14,7 +14,7 @@ try:
     import aiofiles
     import cairo
 except ImportError:
-    print('To use unreleased functions you need to install AIOFILES and PYCAIRO')
+    print('To use unreleased functions you need to install AIOFILES')
 
 
 class Unreleased(Hltv):
@@ -27,7 +27,7 @@ class Unreleased(Hltv):
                 debug=hltv.DEBUG,
                 max_retries=hltv.max_retries,
                 proxy_protocol=hltv.PROXY_PROTOCOL,
-                delete_proxy=hltv.PROXY_ONCE,
+                remove_proxy=hltv.PROXY_ONCE,
                 tz=hltv.TIMEZONE
             )
 

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "hltv_async_api"
-version = "0.8.0b"
+version = "0.8.0b1"
 authors = ["Akim Slys <akimslys2003@gmail.com>"]
 description = "An unofficial asynchronous HLTV API Wrapper for Python"
 readme = "README.md"
@@ -16,8 +16,8 @@ Issues = "https://github.com/akimerslys/aiohltv/issues"
 
 [tool.poetry.dependencies]
 python = "^3.9"
-beautifulsoup4 = "^4.12.3"
-aiohttp = "^3.9.3"
-pytz = "^2024.1"
-setuptools = "^69.1.0"
-lxml = "5.2.0"
+beautifulsoup4 = "^4.0.1"
+aiohttp = "^3.0.1"
+pytz = "*"
+setuptools = "*"
+lxml = "^5.0.0"

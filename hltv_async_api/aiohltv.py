@@ -12,14 +12,14 @@ from aiohttp.client_exceptions import ClientProxyConnectionError, ClientResponse
 
 
 class Hltv:
-    def __init__(self, max_delay: int = 15,
+    def __init__(self, max_delay: int = 10,
                  timeout: int = 5,
                  proxy_path: str | None = None,
                  proxy_list: list | None = None,
                  debug: bool = False,
-                 max_retries: int = 0,
+                 max_retries: int = 10,
                  proxy_protocol: str | None = None,
-                 delete_proxy: bool = False,
+                 remove_proxy: bool = False,
                  tz: str | None = None,
                  safe_mode: bool = True,
                  ):
@@ -42,7 +42,7 @@ class Hltv:
         self.PROXY_PATH = proxy_path
         self.PROXY_LIST = proxy_list
         self.PROXY_PROTOCOL = proxy_protocol
-        self.PROXY_ONCE = delete_proxy
+        self.PROXY_ONCE = remove_proxy
 
         if self.PROXY_PATH:
             with open(self.PROXY_PATH, "r") as file:
@@ -60,7 +60,7 @@ class Hltv:
         self.loop = asyncio.get_running_loop()
 
         self.SAFE = safe_mode
-        self._init_SAFE()
+        self._init_safe()
 
     async def __aenter__(self):
         self._create_session()
@@ -92,7 +92,7 @@ class Hltv:
                debug: bool | None = None,
                max_retries: int | None = None,
                proxy_protocol: str | None = None,
-               delete_proxy: bool | None = None,
+               remove_proxy: bool | None = None,
                tz: str | None = None,
                safe_mode: bool | None = None,
                ):
@@ -108,8 +108,8 @@ class Hltv:
             self.max_retries = max_retries
         if proxy_protocol:
             self.PROXY_PROTOCOL = proxy_protocol
-        if delete_proxy is not None:
-            self.PROXY_ONCE = delete_proxy
+        if remove_proxy is not None:
+            self.PROXY_ONCE = remove_proxy
         if tz is not None:
             self.TIMEZONE = tz
             self._init_tz()
@@ -131,26 +131,33 @@ class Hltv:
                 self.logger.error('UnknownTimeZoneError, Using default timezone: Europe/Copenhagen')
                 self.TIMEZONE = None
 
-    def _init_SAFE(self):
+    def _init_safe(self):
         if not self.SAFE:
             self.logger.warning('Safe mode deactivated.')
 
     def _get_proxy(self):
-        proxy = self.PROXY_LIST[0]
+        try:
+            proxy = self.PROXY_LIST[0]
 
-        if self.PROXY_PROTOCOL and proxy != '' and self.PROXY_PROTOCOL not in proxy:
-            proxy = self.PROXY_PROTOCOL + '://' + proxy
+            if self.PROXY_PROTOCOL and proxy != '' and self.PROXY_PROTOCOL not in proxy:
+                proxy = self.PROXY_PROTOCOL + '://' + proxy
 
-        return proxy
+            return proxy
+        except IndexError:
+            self.logger.error('No proxies left')
 
-    def _switch_proxy(self):
-        if self.PROXY_ONCE:
-            self.logger.debug(f'Removing proxy {self.PROXY_LIST[0]}')
-            self.PROXY_LIST = self.PROXY_LIST[1:]
-        else:
-            self.logger.debug(f"Switching proxy {self.PROXY_LIST[0] if self.PROXY_LIST[0] else 'No Proxy'}")
-            self.PROXY_LIST = self.PROXY_LIST[1:] + [(self.PROXY_LIST[0])]
-            self.logger.info(f"New proxy: {self.PROXY_LIST[0] if self.PROXY_LIST[0] else 'No Proxy'}")
+    async def _switch_proxy(self):
+        try:
+            if self.PROXY_ONCE:
+                self.logger.debug(f'Removing proxy {self.PROXY_LIST[0]}')
+                self.PROXY_LIST = self.PROXY_LIST[1:]
+            else:
+                self.logger.debug(f"Switching proxy {self.PROXY_LIST[0] if self.PROXY_LIST[0] else 'No Proxy'}")
+                self.PROXY_LIST = self.PROXY_LIST[1:] + [(self.PROXY_LIST[0])]
+                self.logger.info(f"New proxy: {self.PROXY_LIST[0] if self.PROXY_LIST[0] else 'No Proxy'}")
+        except IndexError:
+            self.logger.error('No proxies left')
+
 
     @staticmethod
     def _f(result):
@@ -199,8 +206,13 @@ class Hltv:
                 self.logger.debug(f"Error, Code {response.status=}")
                 return False, await self.loop.run_in_executor(None, partial(self._parse_error_handler, delay))
 
+        except ClientHttpProxyError as e:
+            self.logger.debug(e)
+            delay = self._parse_error_handler(delay)
+            return False, delay
+
         except (ClientProxyConnectionError, ClientResponseError, ClientOSError,
-                ServerDisconnectedError, TimeoutError, ClientHttpProxyError, ClientTimeout) as e:
+                ServerDisconnectedError, ClientTimeout, Exception) as e:
             self.logger.debug(e)
             delay = self._parse_error_handler(delay)
             return False, delay
@@ -394,7 +406,7 @@ class Hltv:
                              stats: bool = True,
                              predicts: bool = True):
         if self.SAFE:
-            self.logger.error('This function if SAFE. Switch safe to False to use this function')
+            self.logger.error('This function is not safe. Switch safe-mode to False to use this function')
             return
 
         r = await self._fetch(f"https://www.hltv.org/matches/{str(id)}/"
@@ -528,7 +540,7 @@ class Hltv:
         """returns a list of big event matches results"""
 
         if self.SAFE:
-            self.logger.error('This function if SAFE. Switch safe to False to use this function')
+            self.logger.error('This function is not safe. Switch safe-mode to False to use this function')
             return
 
         r = await self._fetch("https://www.hltv.org/results")
@@ -625,7 +637,7 @@ class Hltv:
                                                                                                  dict[str, Any]] | None:
 
         if self.SAFE:
-            self.logger.error('This function if SAFE. Switch safe to False to use this function')
+            self.logger.error('This function is not safe. Switch safe-mode to False to use this function')
             return
 
         r = await self._fetch("https://www.hltv.org/results?event=" + str(event_id))
@@ -1049,7 +1061,9 @@ class Hltv:
             team_str = 'None'
             team_id = 0
 
-        age = int(r.find('div', class_='playerInfoRow playerAge').find('span', class_='listRight').get_text().strip().split()[0])
+        age = int(
+            r.find('div', class_='playerInfoRow playerAge').find('span', class_='listRight').get_text().strip().split()[
+                0])
 
         rating_div = r.find('div', class_='playerpage-container').find_all('span', class_='statsVal')
         rating = rating_div[0].get_text().strip()
@@ -1160,7 +1174,8 @@ class Hltv:
 
 
 async def main():
-    async with Hltv(proxy_path='proxies.txt', proxy_protocol='http', debug=True) as hltv:
+    async with Hltv(proxy_path='proxies.txt', proxy_protocol='http', debug=True, safe_mode=False,
+                    remove_proxy=True) as hltv:
         print(await hltv.get_top_players())
 
 

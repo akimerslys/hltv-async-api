@@ -87,7 +87,7 @@ class HltvHardTest:
                     try:
                         match_ = await self.hltv.get_match_info(match["id"], match['team1'], match['team2'], match['event'])
                         self.logger.debug(f'match={match_}')
-                    except BaseException as e:
+                    except Exception as e:
                         self.logger.error(e)
                         err += 1
 
@@ -118,7 +118,7 @@ class HltvHardTest:
                     event_ = await self.hltv.get_event_info(event["id"], event["title"])
                     logging.debug(f'event={event_}')
 
-                except BaseException as e:
+                except Exception as e:
                     self.logger.error(e)
                     self.logger.error(f'TYPE: INFO ID={event["id"]} TITLE={event["title"]}')
                     self.errors += 1
@@ -133,7 +133,7 @@ class HltvHardTest:
                     event_matches = await self.hltv.get_event_matches(event['id'], 7)
                     logging.debug(f'event_matches={event_matches}')
 
-                except BaseException as e:
+                except Exception as e:
                     self.logger.error(e)
                     self.logger.error(f'TYPE: MATCHES ID={event["id"]} TITLE={event["title"]}')
                     self.errors += 1
@@ -148,7 +148,7 @@ class HltvHardTest:
                     event_results = await self.hltv.get_event_results(event['id'], 7, max_=100)
                     logging.debug(f'event_results={event_results}')
 
-                except BaseException as e:
+                except Exception as e:
                     self.logger.error(e)
                     self.logger.error(f'TYPE: RESULTS ID={event["id"]} TITLE={event["title"]}')
                     self.errors += 1
@@ -179,7 +179,7 @@ class HltvHardTest:
                 try:
                     team_ = await self.hltv.get_team_info(team["id"], team['title'])
                     self.success += 1
-                except BaseException as e:
+                except Exception as e:
                     self.logger.error(e)
                     self.logger.debug(team_)
                     self.errors += 1
@@ -225,7 +225,7 @@ class HltvHardTest:
 
 @pytest.mark.asyncio
 async def main():
-    async with Hltv(debug=True, proxy_path='proxies.txt', proxy_protocol='http') as hltv:
+    async with Hltv(debug=True, safe_mode=False) as hltv:
         test = HltvHardTest(hltv=hltv, debug=True)
         await test.start_test()
 

@@ -5,7 +5,7 @@ from hltv_async_api.unreleased import Unreleased
 
 async def main():
     hltv = Hltv(proxy_path='proxies.txt', proxy_protocol='http', debug=True)
-    hltv_beta = Unreleased(hltv)
+    hltv_beta = Unreleased(Hltv)
     teams = await hltv.get_top_teams()
     for team in teams:
         players = await hltv.get_team_info(team['id'], team['title'])
