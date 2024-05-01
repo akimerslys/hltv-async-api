@@ -248,12 +248,12 @@ pip install hltv-async-api
     >>>[{'id': '1111', 'rank': '1', 'title': 'FaZe', 'points': '939', 'change': '-', 'id': '6667'}, {'id': '1111', 'rank': '2', 'title': 'Natus Vincere', 'points': '757', 'change': '+4', 'id': '4608'}]
     ```
 
-* **get_team_info(team_id: int | str, title: str) -> (team_id, team_title, rank, {player:player_id}, coach, average_age, weeks_in_top_20, last_trophy, total_trophys)**
+* **get_team_info(team_id: int | str, title: str) -> (team_id, team_title, rank, {'player':player_id}, coach, average_age, weeks_in_top_20, last_trophy, total_trophys)**
 
     ```
     await hltv.get_team_info(6667, 'faze')
     
-    >>>(6667, 'faze', '1', ['karrigan', 'rain', 'frozen', 'ropz', 'broky'], 'NEO', '26.6', '258', 'IEM Chengdu 2024', 22)
+    >>>{'id': 6667, 'title': 'faze', 'rank': '1', 'players': {'karrigan': 429, 'rain': 8183, 'frozen': 9960, 'ropz': 11816, 'broky': 18053}, 'coach': 'NEO', 'age': '26.6', 'weekstop30': '260', 'last_trophy': 'IEM Chengdu 2024', 'total_trophies': 22}
     ```
 
 * **get_last_news(max_reg_news=2, only_today=True, only_featured=False) -> [date, [featured_id, featured_title, featured_desciption], [regular_id, reg_title, reg_time]]**

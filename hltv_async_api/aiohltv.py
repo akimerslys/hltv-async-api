@@ -121,7 +121,7 @@ class Hltv:
                 self.PROXY_LIST = [line.strip() for line in file.readlines()]
         if safe_mode is not None:
             self.SAFE = safe_mode
-            self._init_SAFE()
+            self._init_safe()
 
     def _init_tz(self, tz: str | None = None):
         if tz:
@@ -1174,9 +1174,9 @@ class Hltv:
 
 
 async def main():
-    async with Hltv(proxy_path='proxies.txt', proxy_protocol='http', debug=True, safe_mode=False,
+    async with Hltv(debug=True, safe_mode=False,
                     remove_proxy=True) as hltv:
-        print(await hltv.get_top_players())
+        print(await hltv.get_team_info(6667, 'faze'))
 
 
 if __name__ == '__main__':
