@@ -2,10 +2,10 @@
 
 # Future
 
-* **0.8** more event info data (winners, stats, groups, teams), refactor last_matches in player_info. Optimize proxy functions. Coverage. (?) Rotating user agent (exp. till 20.05)
+* **0.8** more event info data (winners, stats, groups, teams), refactor last_matches in player_info. Optimize proxy functions. Coverage. Random delay, Improve logging, (?) Rotating user agent (exp. till 20.05)
 * **0.9.0** stats & images update, more stats scrapers, team logos, player photos, images, more data, team_map stats, map stats, more functions such as get_news_id, get_team_logo, get_player_photo, get_demo_id, get_match_stats...
 * **0.10.0** synchronous update, reformatting the library as a synchronous, move async parser as an extension. (JULY-AUGUST 2024)
-* **0.11.0** ...
+* **0.11.0 - 1.0.0** Provide to use Hltv-async-api on any system, language, by creating a RESTful service.
 
 
 # Features
@@ -39,18 +39,18 @@ pip install hltv-async-api
 
 # Simple Usage
 
-    ```
+  ```
 
     from hltv_async_api import Hltv
     
     async with Hltv() as hltv:
       print(await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
 
-    ```
+  ```
 
   **OR**
 
-    ```
+  ```
 
     from hltv_async_api import Hltv
     
@@ -58,16 +58,20 @@ pip install hltv-async-api
     print(await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
     await hltv.close()
 
-    ```
+  ```
 
 
 ---
 
 # Configs
 
-* max_delay: int = 15
+* min_delay && max_delay = 10.0
 
-    Automatically increasing reconnecting delay by 1 sec to max_delay (from 1s to 5s)
+    Automatically generating random delay between your min_delay and max_delay
+
+* max_delay: float = 10.0
+
+    Automatically increasing reconnecting delay by 1 sec to max_delay (from 1s to 10s)
 
     ```
     hltv = Hltv(max_delay=5)
@@ -79,6 +83,10 @@ pip install hltv-async-api
     >>>Got 403 forbitten
     >>>Calling again, increasing delay to 5s
     ```
+
+* proxy_delay: bool = False
+
+    Delay if you're using proxy.
 
 * max_retries: int = 10
 

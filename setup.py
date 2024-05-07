@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='hltv_async_api',
-    version='0.8.0',
+    version='0.8.1',
     author='akimerslys',
     author_email='akimslys2003@gmail.com',
     description='An unofficial asynchronous HLTV API Wrapper for Python\nUse only in non-commercial purposes.',

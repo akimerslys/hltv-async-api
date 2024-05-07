@@ -2,7 +2,8 @@ import pytz
 import asyncio
 import re
 import logging
-from typing import Any, List
+import random
+from typing import Any, List, Optional
 from datetime import date, datetime, timedelta
 from bs4 import BeautifulSoup
 from functools import partial
@@ -12,16 +13,19 @@ from aiohttp.client_exceptions import ClientProxyConnectionError, ClientResponse
 
 
 class Hltv:
-    def __init__(self, max_delay: int = 10,
+    def __init__(self,
+                 min_delay: float = -1.0,
+                 max_delay: float = 10.0,
                  timeout: int = 5,
+                 max_retries: int = 10,
                  proxy_path: str | None = None,
                  proxy_list: list | None = None,
-                 debug: bool = False,
-                 max_retries: int = 10,
+                 proxy_delay: bool = False,
                  proxy_protocol: str | None = None,
                  remove_proxy: bool = False,
                  tz: str | None = None,
                  safe_mode: bool = True,
+                 debug: bool = False,
                  ):
         self.headers = {
             "referer": "https://www.hltv.org/stats",
@@ -32,7 +36,10 @@ class Hltv:
         self._configure_logging()
         self.logger = logging.getLogger(__name__)
 
+        self.MIN_DELAY = min_delay
         self.MAX_DELAY = max_delay
+        self._init_delay()
+
         self.timeout = timeout
         self.max_retries = max_retries
 
@@ -43,6 +50,7 @@ class Hltv:
         self.PROXY_LIST = proxy_list
         self.PROXY_PROTOCOL = proxy_protocol
         self.PROXY_ONCE = remove_proxy
+        self.PROXY_DELAY = proxy_delay
 
         if self.PROXY_PATH:
             with open(self.PROXY_PATH, "r") as file:
@@ -81,23 +89,40 @@ class Hltv:
             self.session = None
 
     def _configure_logging(self):
-        level = logging.DEBUG if self.DEBUG else logging.INFO
-        logging.basicConfig(level=level, format="%(message)s")
+        def get_logger(name, **kwargs):
+            import logging
 
-    def config(self, max_delay: int | None = None,
-               timeout: int | None = None,
-               use_proxy: bool | None = None,
-               proxy_file_path: str | None = None,
-               proxy_list: list | None = None,
-               debug: bool | None = None,
-               max_retries: int | None = None,
-               proxy_protocol: str | None = None,
-               remove_proxy: bool | None = None,
-               tz: str | None = None,
-               safe_mode: bool | None = None,
+            logging.basicConfig(**kwargs)
+            logger = logging.getLogger(name)
+            logger.debug(f"start logging '{name}'")
+            return logger
+
+        self.logger = get_logger(
+            __name__,
+            **{
+                "level": "DEBUG" if self.DEBUG else "INFO",
+                "format": "%(levelname)s : %(message)s ",
+            },
+        )
+
+    def config(self,
+               min_delay: Optional[float] = None,
+               max_delay: Optional[float] = None,
+               timeout: Optional[int] = None,
+               use_proxy: Optional[bool] = None,
+               proxy_file_path: Optional[str] = None,
+               proxy_list: Optional[list] = None,
+               debug: Optional[bool] = None,
+               max_retries: Optional[int] = None,
+               proxy_protocol: Optional[str] = None,
+               remove_proxy: Optional[bool] = None,
+               tz: Optional[str] = None,
+               safe_mode: Optional[bool] = None,
                ):
-        if max_delay:
+        if min_delay or max_delay:
+            self.MIN_DELAY = min_delay
             self.MAX_DELAY = max_delay
+            self._init_delay()
         if timeout:
             self.timeout = timeout
         if use_proxy is not None:
@@ -135,6 +160,13 @@ class Hltv:
         if not self.SAFE:
             self.logger.warning('Safe mode deactivated.')
 
+    def _init_delay(self):
+        if self.MIN_DELAY != -1.0:
+            if self.MAX_DELAY >= self.MIN_DELAY >= 0.0 and self.MAX_DELAY >= 0.0:
+                return
+            self.logger.warning(f'Invalid min/max delay. Delay will be increasing by 1 sec')
+        self.MIN_DELAY = None
+
     def _get_proxy(self):
         try:
             proxy = self.PROXY_LIST[0]
@@ -158,7 +190,6 @@ class Hltv:
         except IndexError:
             self.logger.error('No proxies left')
 
-
     @staticmethod
     def _f(result):
         return BeautifulSoup(result, "lxml")
@@ -174,12 +205,16 @@ class Hltv:
     def _parse_error_handler(self, delay: int = 0) -> int:
         if self.USE_PROXY:
             self._switch_proxy()
+            if not self.PROXY_DELAY:
+                return 0
+
+        if self.MIN_DELAY:
+            delay = random.uniform(self.MIN_DELAY, self.MAX_DELAY)
+            self.logger.debug(f'Random delay{round(delay, 2)}s')
         else:
             if delay < self.MAX_DELAY:
                 delay += 1
-            else:
-                self.logger.debug("Reached max delay limit, try to use proxy")
-            self.logger.info(f"Calling again, increasing delay to {delay}s")
+                self.logger.info(f"Increasing delay to {delay}s")
 
         return delay
 
@@ -198,24 +233,21 @@ class Hltv:
                     result = await response.text()
                     page = await self.loop.run_in_executor(None, partial(self._f, result))
                     forbitten = await self.loop.run_in_executor(None, partial(self._cloudflare_check, page))
-
-                    if forbitten:
-                        return False, await self.loop.run_in_executor(None, partial(self._parse_error_handler, delay))
-                    return True, page
+                    if not forbitten:
+                        return True, page
 
                 self.logger.debug(f"Error, Code {response.status=}")
                 return False, await self.loop.run_in_executor(None, partial(self._parse_error_handler, delay))
 
         except ClientHttpProxyError as e:
             self.logger.debug(e)
-            delay = self._parse_error_handler(delay)
-            return False, delay
 
         except (ClientProxyConnectionError, ClientResponseError, ClientOSError,
                 ServerDisconnectedError, ClientTimeout, Exception) as e:
             self.logger.debug(e)
-            delay = self._parse_error_handler(delay)
-            return False, delay
+
+        delay = self._parse_error_handler(delay)
+        return False, delay
 
     async def _fetch(self, url, delay: int = 0):
         if not self.session:
