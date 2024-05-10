@@ -2,7 +2,7 @@
 
 # Future
 
-* **0.8** more event info data (winners, stats, groups, teams), refactor last_matches in player_info. Optimize proxy functions. Coverage. Random delay, Improve logging, (?) Rotating user agent (exp. till 20.05)
+* **0.8** more event info data (winners, stats, groups, teams), refactor last_matches in player_info. Optimize proxy functions. Coverage.(?) Rotating user agent (exp. till 20.05)
 * **0.9.0** stats & images update, more stats scrapers, team logos, player photos, images, more data, team_map stats, map stats, more functions such as get_news_id, get_team_logo, get_player_photo, get_demo_id, get_match_stats...
 * **0.10.0** synchronous update, reformatting the library as a synchronous, move async parser as an extension. (JULY-AUGUST 2024)
 * **0.11.0 - 1.0.0** Provide to use Hltv-async-api on any system, language, by creating a RESTful service.
@@ -65,15 +65,11 @@ pip install hltv-async-api
 
 # Configs
 
-* min_delay && max_delay = 10.0
-
-    Automatically generating random delay between your min_delay and max_delay
-
 * max_delay: float = 10.0
 
-    Automatically increasing reconnecting delay by 1 sec to max_delay (from 1s to 10s)
+  Automatically increasing delay by 1 sec to 10s
 
-    ```
+  ```
     hltv = Hltv(max_delay=5)
     
     >>>Fetching https://www.hltv.org/matches/2370727/faze-vs-natus-vincere-pgl-cs2-major-copenhagen-2024, code: 403
@@ -82,11 +78,32 @@ pip install hltv-async-api
     >>>Fetching https://www.hltv.org/matches/2370727/faze-vs-natus-vincere-pgl-cs2-major-copenhagen-2024, code: 403
     >>>Got 403 forbitten
     >>>Calling again, increasing delay to 5s
-    ```
+  ```
+
+* min_delay: float = -1
+
+``` 
+  [DEBUG] Random delay 9.55s 
+  [DEBUG] Trying connect to https://www.hltv.org/matches, try 3/10
+  [DEBUG] Random delay 3.9s 
+  [DEBUG] Trying connect to https://www.hltv.org/matches, try 4/10
+```
+
+
 
 * proxy_delay: bool = False
 
-    Delay if you're using proxy.
+    Delay for proxy uses.
+* 
+  ```
+  [INFO] New proxy: http://123.123.123.123:123 
+  [DEBUG] Random delay 9.55s 
+  [DEBUG] Trying connect to https://www.hltv.org/matches, try 3/10
+  [DEBUG] Switching proxy http://123.123.123.123:123 
+  [INFO] New proxy: http://111.111.111.11:111 
+  [DEBUG] Random delay 3.9s 
+  [DEBUG] Trying connect to https://www.hltv.org/matches, try 4/10
+  ```
 
 * max_retries: int = 10
 
@@ -96,10 +113,10 @@ pip install hltv-async-api
     hltv = Hltv(max_retries=2, debug=True)
     print(await hltv.get_best_players())
     
-    Creating Session
-    Trying connect to https://www.hltv.org/stats/players?startDate=2024-01-01&endDate=2024-12-31&rankingFilter=Top20, try 1/2
-    Trying connect to https://www.hltv.org/stats/players?startDate=2024-01-01&endDate=2024-12-31&rankingFilter=Top20, try 2/2
-    Connection failed
+    >>>Creating Session
+    >>>Trying connect to https://www.hltv.org/stats/players?startDate=2024-01-01&endDate=2024-12-31&rankingFilter=Top20, try 1/2
+    >>>Trying connect to https://www.hltv.org/stats/players?startDate=2024-01-01&endDate=2024-12-31&rankingFilter=Top20, try 2/2
+    >>>Connection failed
     ```
 
 * proxy_list: list | None = None

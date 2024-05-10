@@ -9,13 +9,13 @@ from bs4 import BeautifulSoup
 from functools import partial
 from aiohttp import ClientSession, ClientTimeout
 from aiohttp.client_exceptions import ClientProxyConnectionError, ClientResponseError, ClientOSError, \
-    ServerDisconnectedError, ClientHttpProxyError
+    ServerDisconnectedError, ClientHttpProxyError, ClientConnectorError
 
 
 class Hltv:
     def __init__(self,
-                 min_delay: float = -1.0,
-                 max_delay: float = 10.0,
+                 min_delay: float | int= -1.0,
+                 max_delay: float | int= 10.0,
                  timeout: int = 5,
                  max_retries: int = 10,
                  proxy_path: str | None = None,
@@ -36,8 +36,8 @@ class Hltv:
         self._configure_logging()
         self.logger = logging.getLogger(__name__)
 
-        self.MIN_DELAY = min_delay
-        self.MAX_DELAY = max_delay
+        self.MIN_DELAY = float(min_delay)
+        self.MAX_DELAY = float(max_delay)
         self._init_delay()
 
         self.timeout = timeout
@@ -101,13 +101,13 @@ class Hltv:
             __name__,
             **{
                 "level": "DEBUG" if self.DEBUG else "INFO",
-                "format": "%(levelname)s : %(message)s ",
+                "format": "[%(levelname)s] %(message)s ",
             },
         )
 
     def config(self,
-               min_delay: Optional[float] = None,
-               max_delay: Optional[float] = None,
+               min_delay: Optional[float | int] = None,
+               max_delay: Optional[float | int] = None,
                timeout: Optional[int] = None,
                use_proxy: Optional[bool] = None,
                proxy_file_path: Optional[str] = None,
@@ -120,8 +120,8 @@ class Hltv:
                safe_mode: Optional[bool] = None,
                ):
         if min_delay or max_delay:
-            self.MIN_DELAY = min_delay
-            self.MAX_DELAY = max_delay
+            self.MIN_DELAY = float(min_delay)
+            self.MAX_DELAY = float(max_delay)
             self._init_delay()
         if timeout:
             self.timeout = timeout
@@ -178,7 +178,7 @@ class Hltv:
         except IndexError:
             self.logger.error('No proxies left')
 
-    async def _switch_proxy(self):
+    def _switch_proxy(self):
         try:
             if self.PROXY_ONCE:
                 self.logger.debug(f'Removing proxy {self.PROXY_LIST[0]}')
@@ -210,7 +210,7 @@ class Hltv:
 
         if self.MIN_DELAY:
             delay = random.uniform(self.MIN_DELAY, self.MAX_DELAY)
-            self.logger.debug(f'Random delay{round(delay, 2)}s')
+            self.logger.debug(f'Random delay {round(delay, 2)}s')
         else:
             if delay < self.MAX_DELAY:
                 delay += 1
@@ -239,11 +239,14 @@ class Hltv:
                 self.logger.debug(f"Error, Code {response.status=}")
                 return False, await self.loop.run_in_executor(None, partial(self._parse_error_handler, delay))
 
-        except ClientHttpProxyError as e:
+        except TimeoutError as e:
             self.logger.debug(e)
 
-        except (ClientProxyConnectionError, ClientResponseError, ClientOSError,
-                ServerDisconnectedError, ClientTimeout, Exception) as e:
+        except (ClientProxyConnectionError, ClientResponseError, ClientOSError, ClientConnectorError,
+                ServerDisconnectedError, ClientTimeout, asyncio.TimeoutError, ClientHttpProxyError) as e:
+            self.logger.debug(e)
+
+        except Exception as e:
             self.logger.debug(e)
 
         delay = self._parse_error_handler(delay)
@@ -1206,9 +1209,8 @@ class Hltv:
 
 
 async def main():
-    async with Hltv(debug=True, safe_mode=False,
-                    remove_proxy=True) as hltv:
-        print(await hltv.get_team_info(6667, 'faze'))
+    async with Hltv(debug=True, safe_mode=False, min_delay=2) as hltv:
+        print(await hltv.get_matches())
 
 
 if __name__ == '__main__':
