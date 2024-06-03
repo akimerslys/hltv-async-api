@@ -46,8 +46,8 @@ class HltvHardTest:
             self.parse_and_assert(self.parse_events()),
             self.parse_and_assert(self.parse_matches_results()),
             self.parse_and_assert(self.parse_last_news()),
-            self.parse_and_assert(self.parse_top_players()),
-            self.parse_and_assert(self.parse_top_teams()),
+            self.parse_and_assert(self.parse_players()),
+            self.parse_and_assert(self.parse_teams()),
         )
         await self.hltv.close()
         self.logger.info(self.matches)
@@ -165,7 +165,7 @@ class HltvHardTest:
 
         self.events = f'Parsed {tot} events.({round(time.time() - start_time)}s) ERRORS: {err}/{tot}'
 
-    async def parse_top_teams(self):
+    async def parse_teams(self):
         self.logger.info('parsing teams')
         start_time = time.time()
         err = 0
@@ -189,7 +189,7 @@ class HltvHardTest:
 
         self.teams = f'Parsed {tot} teams.({round(time.time() - start_time)}s) ERRORS: {err}/{tot}'
 
-    async def parse_top_players(self):
+    async def parse_players(self):
         start_time = time.time()
         tot = 1
         err = 0
@@ -197,15 +197,19 @@ class HltvHardTest:
         if top_players:
             self.success += 1
             for player in top_players:
-                tot += 1
+                player_ = None
                 try:
                     player_ = await self.hltv.get_player_info(player['id'], player['nickname'])
-                    self.success += 1
                 except Exception as e:
                     self.logger.error(e)
-                    self.logger.debug(player_)
                     self.errors += 1
                     err += 1
+                finally:
+                    tot += 1
+
+                if player_:
+                    self.success += 1
+                    self.logger.debug(player_)
         else:
             logging.critical('error parsing players')
             self.errors += 1
@@ -225,7 +229,7 @@ class HltvHardTest:
 
 @pytest.mark.asyncio
 async def main():
-    async with Hltv(debug=True, safe_mode=False) as hltv:
+    async with Hltv(debug=True, safe_mode=False, min_delay=1, max_delay=5) as hltv:
         test = HltvHardTest(hltv=hltv, debug=True)
         await test.start_test()
 

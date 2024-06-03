@@ -3,19 +3,17 @@ import asyncio
 import re
 import logging
 import random
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Union
 from datetime import date, datetime, timedelta
 from bs4 import BeautifulSoup
 from functools import partial
-from aiohttp import ClientSession, ClientTimeout
-from aiohttp.client_exceptions import ClientProxyConnectionError, ClientResponseError, ClientOSError, \
-    ServerDisconnectedError, ClientHttpProxyError, ClientConnectorError
+from aiohttp import ClientSession
 
 
 class Hltv:
     def __init__(self,
-                 min_delay: float | int= -1.0,
-                 max_delay: float | int= 10.0,
+                 min_delay: float | int = -1.0,
+                 max_delay: float | int = 10.0,
                  timeout: int = 5,
                  max_retries: int = 10,
                  proxy_path: str | None = None,
@@ -24,7 +22,7 @@ class Hltv:
                  proxy_protocol: str | None = None,
                  remove_proxy: bool = False,
                  tz: str | None = None,
-                 safe_mode: bool = True,
+                 safe_mode: bool = False,
                  debug: bool = False,
                  ):
         self.headers = {
@@ -52,17 +50,13 @@ class Hltv:
         self.PROXY_ONCE = remove_proxy
         self.PROXY_DELAY = proxy_delay
 
-        if self.PROXY_PATH:
-            with open(self.PROXY_PATH, "r") as file:
-                self.PROXY_LIST = [line.strip() for line in file.readlines()]
-
-        if self.PROXY_PROTOCOL:
-            self.PROXY_LIST = [self.PROXY_PROTOCOL + '://' + proxy for i, proxy in enumerate(self.PROXY_LIST, start=0)]
-
-        if proxy_path or proxy_list:
-            self.USE_PROXY = True
-        else:
-            self.USE_PROXY = False
+        self.USE_PROXY = proxy_path or proxy_list
+        if self.USE_PROXY:
+            if self.PROXY_PATH:
+                with open(self.PROXY_PATH, "r") as file:
+                    self.PROXY_LIST = [line.strip() for line in file.readlines()]
+            if self.PROXY_PROTOCOL:
+                self.PROXY_LIST = [self.PROXY_PROTOCOL + '://' + proxy for proxy in self.PROXY_LIST]
 
         self.session = None
         self.loop = asyncio.get_running_loop()
@@ -101,24 +95,25 @@ class Hltv:
             __name__,
             **{
                 "level": "DEBUG" if self.DEBUG else "INFO",
-                "format": "[%(levelname)s] %(message)s ",
+                "format": "[%(levelname)s] | %(message)s ",
             },
         )
 
-    def config(self,
-               min_delay: Optional[float | int] = None,
-               max_delay: Optional[float | int] = None,
-               timeout: Optional[int] = None,
-               use_proxy: Optional[bool] = None,
-               proxy_file_path: Optional[str] = None,
-               proxy_list: Optional[list] = None,
-               debug: Optional[bool] = None,
-               max_retries: Optional[int] = None,
-               proxy_protocol: Optional[str] = None,
-               remove_proxy: Optional[bool] = None,
-               tz: Optional[str] = None,
-               safe_mode: Optional[bool] = None,
-               ):
+    def config(
+            self,
+            min_delay: Optional[Union[float, int]],
+            max_delay: Optional[Union[float, int]],
+            timeout: Optional[int],
+            use_proxy: Optional[bool],
+            proxy_file_path: Optional[str],
+            proxy_list: Optional[List[str]],
+            debug: Optional[bool],
+            max_retries: Optional[int],
+            proxy_protocol: Optional[str],
+            remove_proxy: Optional[bool],
+            tz: Optional[str],
+            safe_mode: Optional[bool],
+    ) -> None:
         if min_delay or max_delay:
             self.MIN_DELAY = float(min_delay)
             self.MAX_DELAY = float(max_delay)
@@ -158,7 +153,7 @@ class Hltv:
 
     def _init_safe(self):
         if not self.SAFE:
-            self.logger.warning('Safe mode deactivated.')
+            self.logger.debug('Safe mode deactivated.')
 
     def _init_delay(self):
         if self.MIN_DELAY != -1.0:
@@ -239,15 +234,9 @@ class Hltv:
                 self.logger.debug(f"Error, Code {response.status=}")
                 return False, await self.loop.run_in_executor(None, partial(self._parse_error_handler, delay))
 
-        except TimeoutError as e:
-            self.logger.debug(e)
-
-        except (ClientProxyConnectionError, ClientResponseError, ClientOSError, ClientConnectorError,
-                ServerDisconnectedError, ClientTimeout, asyncio.TimeoutError, ClientHttpProxyError) as e:
-            self.logger.debug(e)
-
         except Exception as e:
             self.logger.debug(e)
+
 
         delay = self._parse_error_handler(delay)
         return False, delay
@@ -736,7 +725,7 @@ class Hltv:
             t1_id = live['team1']
             t2_id = live['team2']
 
-            # TODO FIX SCORES
+            # scores will be implemented in the socket extension of this library.
             """try:
                 scores = live.find("td", class_="matchTeamScore").text.strip().split('-')
                 score_team1 = scores[0].strip()
@@ -870,24 +859,67 @@ class Hltv:
         return events
 
     async def get_event_info(self, event_id: str | int, event_title: str):
-        # TODO ADD WINNER?
-
         r = await self._fetch(f"https://hltv.org/events/{str(event_id)}/{event_title.replace(' ', '-')}")
         if not r:
             return
 
-        event_date_div = r.find('td', {'class', 'eventdate'}).find_all('span')
+        event = {'id': event_id, 'title': event_title}
 
-        event_start = self._normalize_date(event_date_div[0].text.split())
-        event_end = self._normalize_date(event_date_div[1].text.split()[1:-1])
+        def event_date_process(start_date, end_date):
+            current_date = datetime.now()
+            st = 0      # Finished
+            if current_date < start_date:
+                st = 2  # Upcoming
+            elif start_date <= current_date <= end_date:
+                st = 1  # Ongoing
 
-        prize = r.find('td', {'class', 'prizepool text-ellipsis'}).text
+            return start_date.strftime('%d-%m-%Y'), end_date.strftime('%d-%m-%Y'), st
 
-        team_num = r.find('td', {'class', 'teamsNumber'}).text
+        date_unix_values = [int(span.get('data-unix')[:-3])
+                            for span in r.find('td', {'class', 'eventdate'}).find_all('span') if span.get('data-unix')]
+        event['start'], event['end'], event_status = event_date_process(datetime.utcfromtimestamp(date_unix_values[0]), datetime.utcfromtimestamp(date_unix_values[1]))
+        status_d = {0: 'Finished', 1: 'Ongoing', 2: 'Upcoming'}
+        event['status'] = status_d[event_status]
 
-        location = r.find('td', {'class', 'location gtSmartphone-only'}).get_text().replace('\n', '')
+        event['prize'] = r.find('td', {'class', 'prizepool text-ellipsis'}).text if r.find('td', {'class', 'prizepool text-ellipsis'}).text else 'TBA'
 
-        try:
+        event['team_count'] = r.find('td', {'class', 'teamsNumber'}).text if r.find('td', {'class', 'teamsNumber'}).text else 'TBA'
+
+        event['location'] = r.find('td', {'class', 'location gtSmartphone-only'}).get_text().replace('\n', '')
+        
+        if event_status == 0:
+            try:
+                mvp_div = r.find('div', class_='player-and-coin').find('a')
+                if mvp_div:
+                    event['mvp'] = {'id': mvp_div['href'].split('/')[2], 'nickname': mvp_div.get_text().strip()[1:-1]}
+            except IndexError:
+                pass
+
+            try:
+                winners_div = r.find_all('div', class_='placement')
+                winners = []
+                for i, winner in enumerate(winners_div, start=1):
+                    team_div = winner.find('div', class_='team')
+                    team = team_div.get_text().strip()
+                    t_id = team_div.find('a')['href'].split('/')[2]
+                    prize = winner.find('div', class_='prize').text
+                    winners.append({i, team, t_id, prize})
+                event['winners'] = winners
+            except IndexError:
+                pass
+        else:
+            teams_div = r.find_all('div', class_='col standard-box team-box supports-hover')
+            teams = []
+            for team in teams_div:
+                try:
+                    teams.append({team.find('a')['href'].split('/')[2]: team.find('div',
+                                                                                  'text-container').get_text().strip()})  # {id:team_name}
+                except IndexError:
+                    teams.append({'?': '?'})
+            event['teams'] = teams
+
+        """try:
+            # TO BE REWROTE
             group_div = r.find('div', {'class', 'groups-container'})
             groups = []
             for group in group_div.find_all('table', {'class': 'table standard-box'}):
@@ -897,16 +929,9 @@ class Hltv:
                     teams.append(team.find('a').text)
                 groups.append({group_name: teams})
         except AttributeError:
-            groups = []
+            groups = []"""
 
-        return {'id': event_id,
-                'title': event_title,
-                'start': event_start,
-                'end': event_end,
-                'prize': prize,
-                'teams': team_num,
-                'location': location,
-                'group': groups}
+        return event
 
     async def get_top_teams(self, max_teams=30, date_str: str = ''):
         """
@@ -1133,7 +1158,7 @@ class Hltv:
         matches = []
         matches_div = r.find_all('div', class_='col-6 text-ellipsis')[1]
         for match in matches_div.find_all('a'):
-            matches.append(int(match['href'].split('/', 4)[3]))
+            matches.append(match['href'].split('/', 4)[3])
 
         return {'id': int(id),
                 'nickname': nickname,
@@ -1209,8 +1234,9 @@ class Hltv:
 
 
 async def main():
-    async with Hltv(debug=True, safe_mode=False, min_delay=2) as hltv:
-        print(await hltv.get_matches())
+    async with Hltv(debug=True, safe_mode=False, min_delay=1, max_delay=1, proxy_path='proxies.txt', proxy_delay=True,
+                    proxy_protocol='http') as hltv:
+        await hltv.get_top_players(30)
 
 
 if __name__ == '__main__':

@@ -2,10 +2,9 @@
 
 # Future
 
-* **0.8** more event info data (winners, stats, groups, teams), refactor last_matches in player_info. Optimize proxy functions. Coverage.(?) Rotating user agent (exp. till 20.05)
-* **0.9.0** stats & images update, more stats scrapers, team logos, player photos, images, more data, team_map stats, map stats, more functions such as get_news_id, get_team_logo, get_player_photo, get_demo_id, get_match_stats...
-* **0.10.0** synchronous update, reformatting the library as a synchronous, move async parser as an extension. (JULY-AUGUST 2024)
-* **0.11.0 - 1.0.0** Provide to use Hltv-async-api on any system, language, by creating a RESTful service.
+* **0.9.0** (JUNE ?) stats & images update, more stats scrapers, team logos, player photos, images, more data, team_map stats, map stats, more functions such as get_news_id, get_team_logo, get_player_photo, get_demo_id, get_match_stats. Coverage. (?) Rotating user agent
+* **0.10.0** (JULY-AUGUST 2024) synchronous update, reformatting the library as synchronous, move async parser as extension. Rename lib ?.
+* **0.11.0 - 1.0.0** Provide to use Hltv-async-api on any system, language, by creating a RESTful service. (?) Classes. (?)
 
 
 # Features
