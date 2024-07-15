@@ -24,6 +24,7 @@ class Hltv:
                  tz: str | None = None,
                  safe_mode: bool = False,
                  debug: bool = False,
+                 aiohttp_session: ClientSession | None = None,
                  ):
         self.headers = {
             "referer": "https://www.hltv.org/stats",
@@ -58,14 +59,13 @@ class Hltv:
             if self.PROXY_PROTOCOL:
                 self.PROXY_LIST = [self.PROXY_PROTOCOL + '://' + proxy for proxy in self.PROXY_LIST]
 
-        self.session = None
+        self.session = aiohttp_session
         self.loop = asyncio.get_running_loop()
 
         self.SAFE = safe_mode
         self._init_safe()
 
     async def __aenter__(self):
-        self._create_session()
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
@@ -75,6 +75,11 @@ class Hltv:
         if not self.session:
             self.logger.debug('Creating Session')
             self.session = ClientSession()
+
+    def get_session(self):
+        if not self.session:
+            self._create_session()
+        return self.session
 
     async def close(self):
         if self.session:
@@ -113,6 +118,7 @@ class Hltv:
             remove_proxy: Optional[bool],
             tz: Optional[str],
             safe_mode: Optional[bool],
+            aiohttp_session: Optional[ClientSession],
     ) -> None:
         if min_delay or max_delay:
             self.MIN_DELAY = float(min_delay)
@@ -142,6 +148,8 @@ class Hltv:
         if safe_mode is not None:
             self.SAFE = safe_mode
             self._init_safe()
+        if aiohttp_session:
+            self.session = aiohttp_session
 
     def _init_tz(self, tz: str | None = None):
         if tz:
@@ -237,7 +245,6 @@ class Hltv:
         except Exception as e:
             self.logger.debug(e)
 
-
         delay = self._parse_error_handler(delay)
         return False, delay
 
@@ -284,6 +291,11 @@ class Hltv:
         date_string = words[-3] + num + words[-1]
         date = datetime.strptime(date_string, "%B%d%Y")
         return date.strftime("%d-%m-%Y")
+
+    @staticmethod
+    def _get_match_status(status):
+        status_ = {'Match over': 0, 'LIVE': 1}
+        return status_[status] if status in status_ else 2
 
     def _localize_datetime_to_timezone(self, date_: datetime = None, date_str: str = None) -> datetime:
         if not self.TIMEZONE:
@@ -439,9 +451,8 @@ class Hltv:
                               f"{event_title.replace(' ', '-')}")
         if not r:
             return
-        status_ = {'Match over': 0, 'LIVE': 1}
-        status = r.find('div', {'class': 'countdown'}).text
-        status_int = status_[status] if status in status_ else 2
+        status = r.find('div', {'class': 'countdown'})
+        status_int = self._get_match_status(status).text
 
         match_info = {'id': id}
 
@@ -1003,50 +1014,35 @@ class Hltv:
         weeks - weeks in top 20
         """
         r = await self._fetch("https://www.hltv.org/team/" + str(team_id) + '/' + title.replace(' ', '-'))
-        players = {}
+        team = {'id': int(team_id), 'title': title, 'rank': 0, 'players': {}, 'coach': '?', 'age': 0, 'weekstop30': 0}
         try:
             known_players = r.find('div', class_='bodyshot-team g-grid').find_all('a')
-            players = {player.find('span', {'class': 'text-ellipsis bold'}).text: int(player['href'].split('/')[2]) for
+            team['players'] = {player.find('span', {'class': 'text-ellipsis bold'}).text: int(player['href'].split('/')[2]) for
                        player in known_players}
 
             #unknown_players = {'unknown' + str(i): 0 for i in range(len(players) + 1, 6)}
             #players.update(unknown_players)
 
-            rank = '0'
-            weeks = '0'
-            age = '0'
-            coach = ''
-
             for i, stat in enumerate(r.find_all('div', {'class': 'profile-team-stat'}), start=1):
                 try:
                     if i == 1:
-                        rank = stat.find('a').text[1:]
+                        team['rank'] = stat.find('a').text[1:]
                     elif i == 2:
-                        weeks = stat.find('span', {'class': 'right'}).text
+                        team['weekstop30'] = stat.find('span', {'class': 'right'}).text
                     elif i == 3:
-                        age = stat.find('span', {'class': 'right'}).text
+                        team['age'] = stat.find('span', {'class': 'right'}).text
                     elif i == 4:
-                        coach = stat.find('span', {'class': 'bold a-default'}).text[1:-1]
+                        team['coach'] = stat.find('span', {'class': 'bold a-default'}).text[1:-1]
                 except AttributeError:
                     pass
-
-            last_trophy = None
-            total_trophies = None
             try:
-                last_trophy = r.find('div', {'class': 'trophyHolder'}).find('span')['title']
-                total_trophies = len(r.find_all('div', {'class': 'trophyHolder'}))
+                team['logo'] = r.find('div', class_='profile-team-logo-container').find_all('img')[-1]['src']
+                team['last_trophy'] = r.find('div', {'class': 'trophyHolder'}).find('span')['title']
+                team['total_trophies'] = len(r.find_all('div', {'class': 'trophyHolder'}))
             except AttributeError:
                 pass
 
-            return {'id': team_id,
-                    'title': title,
-                    'rank': rank,
-                    'players': players,
-                    'coach': coach,
-                    'age': age,
-                    'weekstop30': weeks,
-                    'last_trophy': last_trophy,
-                    'total_trophies': total_trophies}
+            return team
         except AttributeError:
             raise AttributeError("Parsing error, probably page not fully loaded")
 
@@ -1108,73 +1104,63 @@ class Hltv:
 
     async def get_player_info(self, id: int | str, nickname: str):
         r = await self._fetch(f'https://www.hltv.org/player/{str(id)}/{nickname}')
-
-        name_div = r.find('div', class_='playerRealname')
-        name = name_div.get_text().strip()
-        nationality = name_div.find('img')['title']
+        if not r: return
+        player = {'id': id, 'nickname': nickname}
 
         try:
             team_div = r.find('div', class_='playerInfoRow playerTeam').find('a')
-            team_str = team_div.get_text().strip()
-            team_id = int(team_div['href'].split('/', 3)[2])
+            player['team'] = team_div.get_text().strip()
+            player['team_id'] = int(team_div['href'].split('/', 3)[2])
         except (AttributeError, TypeError):
-            team_str = 'None'
+            team_str = '?'
             team_id = 0
 
-        age = int(
+        name_div = r.find('div', class_='playerRealname')
+        player['name'] = name_div.get_text().strip()
+        player['nationality'] = name_div.find('img')['title']
+
+        player['age'] = int(
             r.find('div', class_='playerInfoRow playerAge').find('span', class_='listRight').get_text().strip().split()[
                 0])
 
         rating_div = r.find('div', class_='playerpage-container').find_all('span', class_='statsVal')
-        rating = rating_div[0].get_text().strip()
-        kpr = rating_div[1].get_text().strip()
-        hs = rating_div[2].get_text().strip()
+        player['rating'] = rating_div[0].get_text().strip()
+        player['kpr'] = rating_div[1].get_text().strip()
+        player['hs'] = rating_div[2].get_text().strip()
 
-        mvps = 0
-        last_trophy = ''
+        player['img'] = r.find('img', class_='bodyshot-img')['src']
         try:
             trophies_div = r.find('div', class_='trophyRow').find_all(class_='trophy')
-            total_trophies = len(trophies_div)
+            player['total_trophies'] = len(trophies_div)
 
             # Find last trophy
             last_trophy = ''
             for trophy in trophies_div:
                 try:
                     if trophy['href'] and 'events' in trophy['href']:
-                        last_trophy = trophy.find('span', class_='trophyDescription')['title']
+                        player['last_trophy'] = trophy.find('span', class_='trophyDescription')['title']
                         break
                 except (KeyError, TypeError):
-                    pass
+                    player['last_trophy'] = ''
 
             # Find MVPs
             try:
-                mvps = int(trophies_div[0].find('div', class_='mvp-count').text)
+                player['total_mvp'] = int(trophies_div[0].find('div', class_='mvp-count').text)
             except (IndexError, AttributeError, ValueError):
-                mvps = 0
+                player['total_mvp'] = 0
 
         except Exception:
-            total_trophies = 0
+            player['total_trophies'] = 0
+        try:
+            matches = []
+            matches_div = r.find_all('div', class_='col-6 text-ellipsis')[1]
+            for match in matches_div.find_all('a'):
+                matches.append(match['href'].split('/', 4)[3])
+            player['last_matches'] = matches
+        except (AttributeError, ValueError):
+            player['last_matches'] = []
 
-        matches = []
-        matches_div = r.find_all('div', class_='col-6 text-ellipsis')[1]
-        for match in matches_div.find_all('a'):
-            matches.append(match['href'].split('/', 4)[3])
-
-        return {'id': int(id),
-                'nickname': nickname,
-                'team': team_str,
-                'team_id': team_id,
-                'name': name,
-                'nationality': nationality,
-                'age': age,
-                'rating': rating,
-                'kpr': kpr,
-                'hs': hs,
-                'last_matches': matches,
-                'last_trophy': last_trophy,
-                'total_trophies': total_trophies,
-                'total_mvps': mvps,
-                }
+        return player
 
     async def get_last_news(self, max_reg_news=2, only_today=True, only_featured=False):
 
@@ -1233,11 +1219,9 @@ class Hltv:
         return news
 
 
-async def main():
-    async with Hltv(debug=True, safe_mode=False, min_delay=1, max_delay=1, proxy_path='proxies.txt', proxy_delay=True,
-                    proxy_protocol='http') as hltv:
-        await hltv.get_top_players(30)
-
-
 if __name__ == '__main__':
+    async def main():
+        async with Hltv(debug=True, safe_mode=False, min_delay=1, max_delay=10, proxy_delay=True,
+                        proxy_protocol='http', max_retries=30) as hltv:
+            print(await hltv.get_player_info('7998', 's1mple'))
     asyncio.run(main())

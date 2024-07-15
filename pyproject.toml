@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "hltv_async_api"
-version = "0.8.2"
+version = "0.8.4"
 authors = ["Akim Slys <akimslys2003@gmail.com>"]
 description = "An unofficial asynchronous HLTV API Wrapper for Python"
 readme = "README.md"
