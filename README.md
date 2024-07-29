@@ -1,10 +1,10 @@
 # hltv-async-api an **unofficial** asynchronous HLTV API Wrapper for Python.
 
-# Future
+# Future Plans
 
-* **0.9.0** (JUNE ?) stats & images update, more stats scrapers, team logos, player photos, images, more data, team_map stats, map stats, more functions such as get_news_id, get_team_logo, get_player_photo, get_demo_id, get_match_stats. Coverage. (?) Rotating user agent
-* **0.10.0** (JULY-AUGUST 2024) synchronous update, reformatting the library as synchronous, move async parser as extension. Rename lib ?.
-* **0.11.0 - 1.0.0** Provide to use Hltv-async-api on any system, language, by creating a RESTful service. (?) Classes. (?)
+* **0.9.0** stats & images update, more stats scrapers, team logos, player photos, images, more data, team_map stats, map stats, more functions such as get_news_id, get_team_logo, get_player_photo, get_demo_id, get_match_stats. Coverage. (?) Rotating user agent
+* **0.10.0** synchronous update, reformatting the library as synchronous, move async parser as extension. Rename lib ?.
+* **0.11.0 - 1.0.0** Provide to use Hltv-async-api on any system, language, by creating a RESTful service. (?) Split aiohltv.py to Files & Classes. (?)
 
 
 # Features
@@ -120,12 +120,12 @@ pip install hltv-async-api
 
 * proxy_list: list | None = None
 
-    automatic rotating proxies, if your proxies doesnt have any protocol you can use proxy_protocol.
-    Note: To add non-proxy to list just put '' to it, you can find example with ar
+    Proxys. _len(proxy_list) >= 1_
+    Note: To add non-proxy to list just put '' to it, you can find template in examples.
 
 * proxy_path: str | None = None
 
-    Path to your proxy (proxy_list will be ignored). If your proxies doesn't have any protocol you can use proxy_protocol
+    Path to your proxy file(proxy_list will be ignored). One proxy per line.
 
 * proxy_protocol: str | None = None,
 
@@ -133,11 +133,11 @@ pip install hltv-async-api
 
 * remove_proxy: bool = False
 
-    Removes proxy from list (proxy_path included) if connection unsuccessfully
+    Removes proxy from list if connection unsuccessfully (proxy_path included)
 
 * timeout: int = 5
 
-    Max time to close connection. Recommended to use timeout=1 if you are using random proxies.
+    Timeout for connection in seconds.
 
 * debug: bool = False
 
@@ -149,8 +149,11 @@ pip install hltv-async-api
 
 * safe_mode: bool = True
 
-    Disallow to wrap restricted data. Switch to False only at your own risk.
+    Disallow to wrap restricted data which . Switch to False only at your own risk.
 
+* aiohttp_session: aiohttp.ClientSession | None = None
+
+    Custom aiohttp session, if you want to use your own session.
 
 ---
 
