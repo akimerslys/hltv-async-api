@@ -2,7 +2,7 @@ from functools import partial
 
 
 class Executor:
-    def __init__(self, loop=None, executor=None):
+    def __init__(self, loop=None, executor=None, logger=None):
         self.EXECUTOR = executor
         self.configure_executor()
         self.loop = loop

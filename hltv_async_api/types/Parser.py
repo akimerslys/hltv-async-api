@@ -42,7 +42,7 @@ class Parser:
         proxy = ''
         # setup new proxy, cuz old one was switched
         if self.client.USE_PROXY:
-            proxy = self.client._get_proxy()
+            proxy = self.client.get_proxy()
         else:
             # delay, only for non-proxy users. (default = 1-15s)
             await asyncio.sleep(delay)

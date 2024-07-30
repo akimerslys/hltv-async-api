@@ -60,7 +60,8 @@ class HltvHardTest:
             self.parse_and_assert(self.parse_teams()),
         )
         await self.hltv.close()
-        self.log_results(start_time)
+        #self.log_results(start_time)
+        return round(time.time() - start_time, 4)
 
     def start_test_sync(self):
         start_time = time.time()
@@ -71,7 +72,8 @@ class HltvHardTest:
         self.parse_and_assert_sync(self.parse_last_news_sync)
         self.parse_and_assert_sync(self.parse_players_sync)
         self.parse_and_assert_sync(self.parse_teams_sync)
-        self.log_results(start_time)
+        #self.log_results(start_time)
+        return round(time.time() - start_time, 4)
 
     def log_results(self, start_time):
         self.logger.info(self.matches)
@@ -107,7 +109,8 @@ class HltvHardTest:
                 self.logger.debug(match)
                 if match['team1'] != 'TBD' and match['id'] != '0' and match['id'] != 0:
                     try:
-                        match_ = await self.hltv.get_match_info(match["id"], match['team1'], match['team2'], match['event'])
+                        match_ = await self.hltv.get_match_info(match["id"], match['team1'], match['team2'],
+                                                                match['event'])
                         self.logger.debug(f'match={match_}')
                     except Exception as e:
                         self.logger.error(e)
@@ -123,7 +126,7 @@ class HltvHardTest:
             self.errors += 1
             self.logger.error("error parsing matches")
 
-        self.matches = f'Parsed {tot} matches.({round(time.time()-start_time)}s) ERRORS: {err}/{tot}'
+        self.matches = f'Parsed {tot} matches.({round(time.time() - start_time)}s) ERRORS: {err}/{tot}'
 
     async def parse_events(self):
         start_time = time.time()
@@ -417,17 +420,28 @@ class HltvHardTest:
 
 @pytest.mark.asyncio
 async def main():
-    async with Hltv(debug=True, safe_mode=True, min_delay=1, max_delay=5) as hltv:
-        test = HltvHardTest(hltv=hltv, debug=True)
-        await test.start_test()
+    hltv = Hltv(debug=True, safe_mode=False, min_delay=0.5, max_delay=2.5, max_retries=10, proxy_path='proxies.txt', proxy_delay=True)
+    test = HltvHardTest(hltv=hltv, debug=True)
+    return await test.start_test(), test
 
+
+
+@pytest.mark.sync
 def sync_test():
-    with SyncHltv(debug=True, safe_mode=True, min_delay=1, max_delay=5) as hltv:
-        test = HltvHardTest(hltv=hltv, debug=True)
-        test.start_test_sync()
+    hltv = SyncHltv(debug=True, safe_mode=False, min_delay=0.5, max_delay=2.5, max_retries=10, proxy_path='proxies.txt', proxy_delay=True)
+    test = HltvHardTest(hltv=hltv, debug=True)
+    return test.start_test_sync(), test
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
-    sync_test()
-
+    t1, h1 = asyncio.run(main())
+    t2, h2 = sync_test()
+    logging.info(f"---")
+    logging.info(f"AIO")
+    logging.info(f"---")
+    h1.log_results(t1)
+    logging.info(f"---")
+    logging.info(f"SYNC")
+    logging.info(f"---")
+    h2.log_results(t2)
+    logging.info(f"AIO :{t1}s  |  Sync :{t2}s")

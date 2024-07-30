@@ -3,3 +3,4 @@ aiohttp~=3.9.3
 pytz~=2024.1
 setuptools~=69.1.0
 lxml==5.2.0
+brotlipy~=0.7.0

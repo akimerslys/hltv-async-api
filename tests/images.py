@@ -14,4 +14,6 @@ async def main():
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    from fake_useragent import UserAgent as ua
+
+    print(str(ua.random), type(ua.google))

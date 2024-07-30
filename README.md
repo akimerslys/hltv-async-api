@@ -2,9 +2,9 @@
 
 # Future Plans
 
-* **0.9.0** stats & images update, more stats scrapers, team logos, player photos, images, more data, team_map stats, map stats, more functions such as get_news_id, get_team_logo, get_player_photo, get_demo_id, get_match_stats. Coverage. (?) Rotating user agent
-* **0.10.0** synchronous update, reformatting the library as synchronous, move async parser as extension. Rename lib ?.
-* **0.11.0 - 1.0.0** Provide to use Hltv-async-api on any system, language, by creating a RESTful service. (?) Split aiohltv.py to Files & Classes. (?)
+* **0.10.0** stats & images update, more stats scrapers, team logos, player photos, images, more data, team_map stats, map stats, more functions such as get_news_id, get_team_logo, get_player_photo, get_demo_id, get_match_stats. Coverage. (?) Rotating user agent
+
+* **FUTURE** Switch from requests to Selenium driver && Live data with socket.io && Provide to use Hltv-async-api on any system, language, by creating a RESTful service.
 
 
 # Features
@@ -16,7 +16,7 @@
 * **New and modern fully async library**
 
 
-* **Huge amount of options**
+* **Huge amount of options and methods**
 
 
 * **Supports proxy usage**
@@ -39,39 +39,31 @@ pip install hltv-async-api
 # Simple Usage
 
   ```
-    import asyncio
+    
     from hltv_async_api import Hltv
     
-    async with Hltv() as hltv:
-      print(await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
+    async def main():
+      async with Hltv() as hltv:
+        print(await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
+        
+    if __name__ == '__main__':
+      import asyncio
+      asyncio.run(main())
 
   ```
 
-  **OR**
 
-  ```
-    import asyncio
-    from hltv_async_api import Hltv
-    
-    hltv = Hltv()
-    print(await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
-    await hltv.close()
+# Synchronus Usage (Beta)
 
-  ```
-
-# Sync Usage
-
-  ```
-  
-    pip install hltv-async-api[sync]
-  
-  ```
+  _For high perfomance usage recommended to use async version, it's 5x faster, and more stable._
 
   ```
   
     from hltv_async_api.sync import Hltv
     
-    hltv = Hltv(hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
+    hltv = Hltv()
+
+    print(hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
   
   ```
 
@@ -483,7 +475,7 @@ Total time 96.8368
 
 # Beta / Unreleased
 
-from hltv_async_api.unreleased import Unreleased
+from hltv_async_api.beta import Beta
 
 # Requirements:
 
@@ -491,3 +483,8 @@ Python 3.9+
 
 License:
 HLTV Async is licensed under the MIT License, allowing for personal and commercial use with minimal restrictions.
+
+# Contributing
+
+Why not ?
+

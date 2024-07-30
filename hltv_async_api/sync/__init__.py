@@ -1,1 +1,0 @@
-from .syncHltv import Hltv

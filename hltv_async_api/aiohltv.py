@@ -1,16 +1,19 @@
 import asyncio
 import logging
 from datetime import date, datetime, timedelta
-from typing import Any, List, Optional, Union
+from typing import Any, Optional
 
 import pytz
 
-from .methods import Matches, Events, Teams, Players, News
-from .types import Client, Executor, Parser
+from hltv_async_api.methods import Matches, Events, Teams, Players, News
+from hltv_async_api.types import Client, Executor, Parser
 
 
 class Hltv:
     def __init__(self,
+                 client: Client | None = None,
+                 executor: Executor | None = None,
+                 parser: Parser | None = None,
                  min_delay: float | int = None,
                  max_delay: float | int = None,
                  timeout: int = None,
@@ -18,7 +21,7 @@ class Hltv:
                  proxy_path: str | None = None,
                  proxy_list: list | None = None,
                  proxy_delay: bool = False,
-                 proxy_protocol: str | None = None,
+                 proxy_protocol: str | None = 'http',
                  remove_proxy: bool = False,
                  tz: str | None = None,
                  safe_mode: bool = False,
@@ -27,24 +30,34 @@ class Hltv:
         self.DEBUG = debug
         self._configure_logging()
         self.logger = logging.getLogger(__name__)
+        self.loop = asyncio.get_running_loop()
 
         self.TIMEZONE = tz
         self._init_tz(tz)
 
-        self.client = Client(min_delay,
-                             max_delay,
-                             timeout,
-                             max_retries,
-                             proxy_path,
-                             proxy_list,
-                             proxy_delay,
-                             proxy_protocol,
-                             remove_proxy, logger=self.logger)
-        self.session = self.client.get_session()
-        self.loop = asyncio.get_running_loop()
-        self.EXECUTOR = Executor(self.loop)
+        if client is None:
+            client = Client(min_delay,
+                            max_delay,
+                            timeout,
+                            max_retries,
+                            proxy_path,
+                            proxy_list,
+                            proxy_delay,
+                            proxy_protocol,
+                            remove_proxy, logger=self.logger)
 
-        self.PARSER = Parser(self.client, self.EXECUTOR, self.logger)
+        self.client = client
+        self.session = self.client.get_session()
+
+        if executor is None:
+            executor = Executor(loop=self.loop, logger=self.logger)
+
+        self.EXECUTOR = executor
+
+        if parser is None:
+            parser = Parser(self.client, self.EXECUTOR, self.logger)
+
+        self.PARSER = parser
 
         self.SAFE = safe_mode
         self._init_safe()
@@ -64,6 +77,7 @@ class Hltv:
     async def close(self):
         if self.session:
             self.logger.debug('Closing Session')
+            await self.client.session.close()
             self.session = None
         if self.EXECUTOR:
             self.EXECUTOR.close()
@@ -349,10 +363,13 @@ class Hltv:
 
 
 if __name__ == '__main__':
+    import random
+    print()
     async def main():
-        async with Hltv(debug=True, safe_mode=False, min_delay=1, max_delay=3, proxy_delay=True,
-                        proxy_protocol='http', max_retries=30) as hltv:
+        async with Hltv(debug=True, safe_mode=False, min_delay=1, max_delay=3, proxy_path='proxies.txt',
+                        proxy_protocol='http', max_retries=10) as hltv:
             print(await hltv.get_match_info(2373774, 'astralis', 'falcons', 'blast-premier-fall-groups-2024'))
 
 
     asyncio.run(main())
+1

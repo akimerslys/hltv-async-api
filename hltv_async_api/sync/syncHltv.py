@@ -7,7 +7,7 @@ from typing import Optional, Union, List, Any
 import pytz
 from bs4 import BeautifulSoup
 
-from ..methods import Matches, Teams, Events, Players, News
+from hltv_async_api.methods import Matches, Teams, Events, Players, News
 import requests
 
 
@@ -25,12 +25,28 @@ class Hltv:
                  tz: str | None = None,
                  safe_mode: bool = False,
                  debug: bool = False,
+                 session: requests.Session | None = requests.Session(),
                  ):
+
         self.headers = {
-            "referer": "https://www.hltv.org/stats",
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            "hltvTimeZone": "Europe/Copenhagen"
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "en;q=0.9,en-US;q=0.8",
+            "Cache-Control": "max-age=0",
+            "Cookie": "nightmode=on; promode=on; hltvTimeZone=Europe/Copenhagen;",
+            "Priority": "u=0, i",
+            "Referer": "https://www.hltv.org/",
+            "sec-ch-ua": '"Not)A;Brand";v="99", "Microsoft Edge";v="127", "Chromium";v="127"',
+            "sec-ch-ua-arch": "x86",
+            "sec-ch-ua-bitness": "64",
+            "sec-ch-ua-full-version": "127.0.2651.74",
+            "sec-ch-ua-full-version-list": "Not)A;Brand\";v=\"99.0.0.0\", \"Microsoft Edge\";v=\"127.0.2651.74\", \"Chromium\";v=\"127.0.6533.73",
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-model": "",
+            "sec-ch-ua-platform": "Windows",
+            "sec-ch-ua-platform-version": "15.0.0"
         }
+
         self.DEBUG = debug
         self._configure_logging()
         self.logger = logging.getLogger(__name__)
@@ -61,11 +77,12 @@ class Hltv:
 
         self.SAFE = safe_mode
         self._init_safe()
-        self.MATCHES = Matches(self)
-        self.TEAMS = Teams(self)
-        self.EVENTS = Events(self)
-        self.PLAYERS = Players(self)
-        self.NEWS = News(self)
+        self.MATCHES = Matches(self.TIMEZONE)
+        self.TEAMS = Teams(self.TIMEZONE)
+        self.EVENTS = Events(self.TIMEZONE)
+        self.PLAYERS = Players(self.TIMEZONE)
+        self.NEWS = News(self.TIMEZONE)
+        self.session = session
 
     def __enter__(self):
         return self
@@ -187,11 +204,10 @@ class Hltv:
 
     def _cloudflare_check(self, page) -> bool:
         challenge_page = page.find(id="challenge-error-title")
-        if challenge_page is not None:
+        if challenge_page:
             if "Enable JavaScript and cookies to continue" in challenge_page.get_text().strip():
-                self.logger.debug("Got cloudflare challenge page")
+                self.logger.warning("ERROR, got cloudflare challenge page")
                 return True
-        return False
 
     def _parse_error_handler(self, delay: int = 0) -> int:
         if self.USE_PROXY:
@@ -218,7 +234,8 @@ class Hltv:
             # delay, only for non-proxy users. (default = 1-15s)
             time.sleep(delay)
         try:
-            response = requests.get(url, headers=self.headers, proxies=proxy, timeout=self.timeout)
+            response = self.session.get(url, headers=self.headers, proxies=proxy, timeout=self.timeout)
+            print(response.status_code, response.text)
             self.logger.info(f"Fetching {url}, code: {response.status_code}")
             if response.status_code == 200:
                 result = response.text
@@ -405,5 +422,5 @@ class Hltv:
 
 
 if __name__ == '__main__':
-    hltv = Hltv()
+    hltv = Hltv(debug=True)
     print(hltv.get_match_info(2373774, 'astralis', 'falcons', 'blast-premier-fall-groups-2024'))

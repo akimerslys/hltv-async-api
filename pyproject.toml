@@ -21,3 +21,9 @@ aiohttp = "^3.0.1"
 pytz = "*"
 setuptools = "*"
 lxml = "^5.0.0"
+
+[tool.poetry.dependencies.e]
+
+[tool.poetry.extras]
+sync = ["requests"]
+beta = [""]
