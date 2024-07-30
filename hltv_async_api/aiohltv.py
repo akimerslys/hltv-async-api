@@ -5,8 +5,8 @@ from typing import Any, List, Optional, Union
 
 import pytz
 
-from hltv_async_api.Methods import Matches, Events, Teams, Players, News
-from hltv_async_api.Types import Executor, Client, Parser
+from .methods import Matches, Events, Teams, Players, News
+from .types import Client, Executor, Parser
 
 
 class Hltv:

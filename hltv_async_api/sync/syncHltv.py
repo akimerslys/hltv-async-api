@@ -7,7 +7,7 @@ from typing import Optional, Union, List, Any
 import pytz
 from bs4 import BeautifulSoup
 
-from hltv_async_api.Methods import Matches
+from ..methods import Matches, Teams, Events, Players, News
 import requests
 
 
@@ -62,6 +62,10 @@ class Hltv:
         self.SAFE = safe_mode
         self._init_safe()
         self.MATCHES = Matches(self)
+        self.TEAMS = Teams(self)
+        self.EVENTS = Events(self)
+        self.PLAYERS = Players(self)
+        self.NEWS = News(self)
 
     def __enter__(self):
         return self
@@ -268,27 +272,27 @@ class Hltv:
             return self.MATCHES.get_matches(r, days, min_rating, live, future)
 
     def get_match_info(self, id_: str | int,
-                             team1: str,
-                             team2: str,
-                             event_title: str,
-                             stats: bool = True,
-                             predicts: bool = True):
+                       team1: str,
+                       team2: str,
+                       event_title: str,
+                       stats: bool = True,
+                       predicts: bool = True):
 
         if self._checksafe():
             return
 
         r = self._fetch(f"https://www.hltv.org/matches/{str(id_)}/"
-                              f"{team1.replace(' ', '-')}-vs-"
-                              f"{team2.replace(' ', '-')}-"
-                              f"{event_title.replace(' ', '-')}")
+                        f"{team1.replace(' ', '-')}-vs-"
+                        f"{team2.replace(' ', '-')}-"
+                        f"{event_title.replace(' ', '-')}")
         if r:
             return self.MATCHES.get_match_info(r, id_, team1, team2, event_title, stats, predicts)
 
     def get_results(self, days: int = 1,
-                          min_rating: int = 1,
-                          max: int = 30,
-                          featured: bool = True,
-                          regular: bool = True) -> list[dict[str, Any]] | None:
+                    min_rating: int = 1,
+                    max: int = 30,
+                    featured: bool = True,
+                    regular: bool = True) -> list[dict[str, Any]] | None:
         """returns a list of big event matches results"""
 
         if self._checksafe():
@@ -299,7 +303,7 @@ class Hltv:
             return self.MATCHES.get_results(r, days, min_rating, max, featured, regular)
 
     def get_event_results(self, event_id: int | str, days: int = 1, max_: int = 10) -> list[
-                                                                                                 dict[str, Any]] | None:
+                                                                                           dict[str, Any]] | None:
 
         if self._checksafe():
             return
@@ -308,10 +312,10 @@ class Hltv:
         if r:
             return self.EVENTS.get_event_results(r, event_id, days, max_)
 
-    def get_event_matches(self, event_id: str | int, days: int = 1):
+    def get_event_matches(self, event_id: str | int, days: int = 1, max_: int = 10):
         r = self._fetch("https://www.hltv.org/events/" + str(event_id) + "/matches")
         if r:
-            return self.EVENTS.get_event_matches(r, event_id, days)
+            return self.EVENTS.get_event_matches(r, event_id, days, max_)
 
     def get_events(self, outgoing=True, future=True, max_events=10):
         """Returns events
@@ -378,7 +382,8 @@ class Hltv:
         if self._checksafe():
             return
 
-        r = self._fetch(f"https://www.hltv.org/stats/players?startDate={year}-01-01&endDate={year}-12-31&rankingFilter=Top20")
+        r = self._fetch(
+            f"https://www.hltv.org/stats/players?startDate={year}-01-01&endDate={year}-12-31&rankingFilter=Top20")
 
         if r:
             return self.PLAYERS.get_top_players(r, top)

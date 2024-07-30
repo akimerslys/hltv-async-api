@@ -39,7 +39,7 @@ pip install hltv-async-api
 # Simple Usage
 
   ```
-
+    import asyncio
     from hltv_async_api import Hltv
     
     async with Hltv() as hltv:
@@ -50,13 +50,29 @@ pip install hltv-async-api
   **OR**
 
   ```
-
+    import asyncio
     from hltv_async_api import Hltv
     
     hltv = Hltv()
     print(await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
     await hltv.close()
 
+  ```
+
+# Sync Usage
+
+  ```
+  
+    pip install hltv-async-api[sync]
+  
+  ```
+
+  ```
+  
+    from hltv_async_api.sync import Hltv
+    
+    hltv = Hltv(hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
+  
   ```
 
 

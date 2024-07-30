@@ -1,6 +1,6 @@
 import asyncio
 from hltv_async_api import Hltv
-from hltv_async_api.unreleased import Unreleased
+from hltv_async_api.beta.unreleased import Unreleased
 
 
 async def main():

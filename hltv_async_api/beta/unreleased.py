@@ -6,7 +6,7 @@ import os
 from aiohttp import ClientResponseError, ClientProxyConnectionError, ServerDisconnectedError, ClientHttpProxyError, \
     ClientTimeout, ClientOSError
 try:
-    from .aiohltv import Hltv
+    from hltv_async_api.aiohltv import Hltv
 except ImportError:
     from aiohltv import Hltv
 
@@ -100,7 +100,7 @@ class Unreleased(Hltv):
 
 
 async def main():
-    hltv = Hltv(proxy_path='proxies.txt', proxy_protocol='http', debug=True)
+    hltv = Hltv(proxy_path='../proxies.txt', proxy_protocol='http', debug=True)
     hltv_beta = Unreleased(hltv)
     await hltv_beta.get_player_imgs('7998', 's1mple')
 

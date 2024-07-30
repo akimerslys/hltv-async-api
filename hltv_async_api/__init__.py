@@ -7,14 +7,12 @@ import asyncio
 from contextlib import suppress
 
 from .aiohltv import Hltv
-from .__meta__ import __author__, __version__
-#from .sync import Sync
-#from .Methods import Methods
+from .__meta__ import __author__, __version__, __default_timezone__
+from . import types, methods, sync, beta
+
 
 with suppress(ImportError):
-    import uvloop as _uvloop
+    import uvloop
+    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
 
-    asyncio.set_event_loop_policy(_uvloop.EventLoopPolicy())
-
-
-__all__ = ['__author__', '__version__', 'Hltv', 'Sync']
+__all__ = ['__author__', '__version__', 'Hltv', 'types', 'methods', 'sync']
