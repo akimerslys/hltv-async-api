@@ -1,24 +1,20 @@
 import asyncio
 import logging
-import random
-from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
-from functools import partial
 from typing import Any, List, Optional, Union
 
 import pytz
-from aiohttp import ClientSession
-from bs4 import BeautifulSoup
 
 from hltv_async_api.Methods import Matches, Events, Teams, Players, News
+from hltv_async_api.Types import Executor, Client, Parser
 
 
 class Hltv:
     def __init__(self,
-                 min_delay: float | int = -1.0,
-                 max_delay: float | int = 10.0,
-                 timeout: int = 5,
-                 max_retries: int = 10,
+                 min_delay: float | int = None,
+                 max_delay: float | int = None,
+                 timeout: int = None,
+                 max_retries: int = None,
                  proxy_path: str | None = None,
                  proxy_list: list | None = None,
                  proxy_delay: bool = False,
@@ -27,45 +23,28 @@ class Hltv:
                  tz: str | None = None,
                  safe_mode: bool = False,
                  debug: bool = False,
-                 aiohttp_session: ClientSession | None = None,          # create session type ?
-                 executor: Any = ThreadPoolExecutor(max_workers=5),     # create executor type ?
                  ):
-        self.headers = {
-            "referer": "https://www.hltv.org/stats",
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-            "hltvTimeZone": "Europe/Copenhagen"
-        }
         self.DEBUG = debug
         self._configure_logging()
         self.logger = logging.getLogger(__name__)
 
-        self.MIN_DELAY = float(min_delay)
-        self.MAX_DELAY = float(max_delay)
-        self._init_delay()
-
-        self.timeout = timeout
-        self.max_retries = max_retries
-
         self.TIMEZONE = tz
         self._init_tz(tz)
 
-        self.PROXY_PATH = proxy_path
-        self.PROXY_LIST = proxy_list
-        self.PROXY_PROTOCOL = proxy_protocol
-        self.PROXY_ONCE = remove_proxy
-        self.PROXY_DELAY = proxy_delay
-
-        self.USE_PROXY = proxy_path or proxy_list
-        if self.USE_PROXY:
-            if self.PROXY_PATH:
-                with open(self.PROXY_PATH, "r") as file:
-                    self.PROXY_LIST = [line.strip() for line in file.readlines()]
-            if self.PROXY_PROTOCOL:
-                self.PROXY_LIST = [self.PROXY_PROTOCOL + '://' + proxy for proxy in self.PROXY_LIST]
-
-        self.session = aiohttp_session
+        self.client = Client(min_delay,
+                             max_delay,
+                             timeout,
+                             max_retries,
+                             proxy_path,
+                             proxy_list,
+                             proxy_delay,
+                             proxy_protocol,
+                             remove_proxy, logger=self.logger)
+        self.session = self.client.get_session()
         self.loop = asyncio.get_running_loop()
-        self.EXECUTOR = executor
+        self.EXECUTOR = Executor(self.loop)
+
+        self.PARSER = Parser(self.client, self.EXECUTOR, self.logger)
 
         self.SAFE = safe_mode
         self._init_safe()
@@ -82,24 +61,12 @@ class Hltv:
     async def __aexit__(self, exc_type, exc, tb):
         await self.close()
 
-
-    def _create_session(self):
-        if not self.session:
-            self.logger.debug('Creating Session')
-            self.session = ClientSession()
-
-    def get_session(self):
-        if not self.session:
-            self._create_session()
-        return self.session
-
     async def close(self):
         if self.session:
             self.logger.debug('Closing Session')
-            await self.session.close()
             self.session = None
         if self.EXECUTOR:
-            self.EXECUTOR.shutdown()
+            self.EXECUTOR.close()
 
     def _configure_logging(self):
         def get_logger(name, **kwargs):
@@ -118,6 +85,13 @@ class Hltv:
             },
         )
 
+    async def _run(self, func, *args, **kwargs):
+        return await self.EXECUTOR.run(func, *args, **kwargs)
+
+    async def _fetch(self, url: str) -> Optional[str]:
+        return await self.PARSER.fetch(url, 0)
+
+    """    
     def config(
             self,
             min_delay: Optional[Union[float, int]],
@@ -132,12 +106,11 @@ class Hltv:
             remove_proxy: Optional[bool],
             tz: Optional[str],
             safe_mode: Optional[bool],
-            aiohttp_session: Optional[ClientSession],
     ) -> None:
         if min_delay or max_delay:
             self.MIN_DELAY = float(min_delay)
             self.MAX_DELAY = float(max_delay)
-            self._init_delay()
+            #self._init_delay()
         if timeout:
             self.timeout = timeout
         if use_proxy is not None:
@@ -157,13 +130,12 @@ class Hltv:
             self.DEBUG = debug
             self._configure_logging()
         if proxy_file_path:
-            with open(self.PROXY_PATH, "r") as file:
+            with open(self.client.PROXY_PATH, "r") as file:
                 self.PROXY_LIST = [line.strip() for line in file.readlines()]
         if safe_mode is not None:
             self.SAFE = safe_mode
             self._init_safe()
-        if aiohttp_session:
-            self.session = aiohttp_session
+            """
 
     def _init_tz(self, tz: str | None = None):
         if tz:
@@ -177,124 +149,10 @@ class Hltv:
         if not self.SAFE:
             self.logger.debug('Safe mode deactivated.')
 
-    def _init_delay(self):
-        if self.MIN_DELAY != -1.0:
-            if self.MAX_DELAY >= self.MIN_DELAY >= 0.0 and self.MAX_DELAY >= 0.0:
-                return
-            self.logger.warning(f'Invalid min/max delay. Delay will be increasing by 1 sec')
-        self.MIN_DELAY = None
-
     def _checksafe(self):
         if self.SAFE:
             self.logger.error('Safe mode is activated. Function is locked')
             return True
-
-    # EXECUTOR
-    async def _run(self, func, *args, **kwargs):
-        return await self.loop.run_in_executor(self.EXECUTOR, partial(func, *args, **kwargs))
-
-    def _get_proxy(self):
-        try:
-            proxy = self.PROXY_LIST[0]
-
-            if self.PROXY_PROTOCOL and proxy != '' and self.PROXY_PROTOCOL not in proxy:
-                proxy = self.PROXY_PROTOCOL + '://' + proxy
-
-            return proxy
-        except IndexError:
-            self.logger.error('No proxies left')
-
-    def _switch_proxy(self):
-        try:
-            if self.PROXY_ONCE:
-                self.logger.debug(f'Removing proxy {self.PROXY_LIST[0]}')
-                self.PROXY_LIST = self.PROXY_LIST[1:]
-            else:
-                self.logger.debug(f"Switching proxy {self.PROXY_LIST[0] if self.PROXY_LIST[0] else 'No Proxy'}")
-                self.PROXY_LIST = self.PROXY_LIST[1:] + [(self.PROXY_LIST[0])]
-                self.logger.info(f"New proxy: {self.PROXY_LIST[0] if self.PROXY_LIST[0] else 'No Proxy'}")
-        except IndexError:
-            self.logger.error('No proxies left')
-
-    @staticmethod
-    def _f(result):
-        return BeautifulSoup(result, "lxml")
-
-    def _cloudflare_check(self, page) -> bool:
-        challenge_page = page.find(id="challenge-error-title")
-        if challenge_page is not None:
-            if "Enable JavaScript and cookies to continue" in challenge_page.get_text().strip():
-                self.logger.debug("Got cloudflare challenge page")
-                return True
-        return False
-
-    def _parse_error_handler(self, delay: int = 0) -> int:
-        if self.USE_PROXY:
-            self._switch_proxy()
-            if not self.PROXY_DELAY:
-                return 0
-
-        if self.MIN_DELAY:
-            delay = random.uniform(self.MIN_DELAY, self.MAX_DELAY)
-            self.logger.debug(f'Random delay {round(delay, 2)}s')
-        else:
-            if delay < self.MAX_DELAY:
-                delay += 1
-                self.logger.info(f"Increasing delay to {delay}s")
-
-        return delay
-
-    async def _parse(self, url, delay):
-        proxy = ''
-        # setup new proxy, cuz old one was switched
-        if self.USE_PROXY:
-            proxy = self._get_proxy()
-        else:
-            # delay, only for non-proxy users. (default = 1-15s)
-            await asyncio.sleep(delay)
-        try:
-            async with self.session.get(url, headers=self.headers, proxy=proxy, timeout=self.timeout) as response:
-                self.logger.info(f"Fetching {url}, code: {response.status}")
-                if response.status == 200:
-                    result = await response.text()
-                    page = await self._run(self._f, result)
-                    forbidden = await self._run(self._cloudflare_check, page)
-                    if not forbidden:
-                        return True, page
-
-                self.logger.debug(f"Error, Code {response.status=}")
-                return False, await self._run(self._parse_error_handler, delay)
-
-        except Exception as e:
-            self.logger.debug(e)
-
-        delay = self._parse_error_handler(delay)
-        return False, delay
-
-    async def _fetch(self, url, delay: int = 0):
-        if not self.session:
-            self._create_session()
-        status = False
-        try_ = 1
-        result = None
-
-        # parse until success or not max retries
-        while (not status) and (try_ != self.max_retries):
-            self.logger.debug(f'Trying connect to {url}, try {try_}/{self.max_retries}')
-
-            # if status = True, result = page,
-            # if status = False, result = delay (default=0)
-            status, result = await self._parse(url, delay)
-
-            if not status and result:
-                delay = result
-            try_ += 1
-
-        if status:
-            return result
-        else:
-            self.logger.error('Connection failed')
-            return None
 
     async def get(self, type: str, id: int | str | None = None,
                   title: str | None = None,
@@ -422,7 +280,6 @@ class Hltv:
         if r:
             return await self._run(self.EVENTS.get_event_info, r, event_id, event_title)
 
-
     async def get_top_teams(self, max_teams=30, date_str: str = ''):
         """
         returns a list of the top 1-30 teams
@@ -455,7 +312,7 @@ class Hltv:
         r = await self._fetch("https://www.hltv.org/team/" + str(team_id) + '/' + title.replace(' ', '-'))
 
         if r:
-            await self._run(self.TEAMS.get_team_info, r, team_id, title)
+            return await self._run(self.TEAMS.get_team_info, r, team_id, title)
 
     async def get_top_players(self, top: int = 40, year: str | int = datetime.strftime(datetime.utcnow(), '%Y')):
         """
@@ -493,7 +350,9 @@ class Hltv:
 
 if __name__ == '__main__':
     async def main():
-        async with Hltv(debug=True, safe_mode=False, min_delay=1, max_delay=10, proxy_delay=True,
+        async with Hltv(debug=True, safe_mode=False, min_delay=1, max_delay=3, proxy_delay=True,
                         proxy_protocol='http', max_retries=30) as hltv:
             print(await hltv.get_match_info(2373774, 'astralis', 'falcons', 'blast-premier-fall-groups-2024'))
+
+
     asyncio.run(main())

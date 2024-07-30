@@ -3,7 +3,7 @@ class Players:
         self.TZ = tz
 
     @staticmethod
-    def get_top_player(r, top):
+    def get_top_players(r, top):
         players = []
         rank = 1
         try:
