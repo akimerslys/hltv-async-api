@@ -2,12 +2,12 @@
 
 # IMPORTANT
 
-From today Im starting to write a Selenium based parser, cuz Cloudflare have banned all my proxies in the last month.
+From today Im starting to write a Selenium based parser, cuz Cloudflare have banned all my proxies in the last month. You can buy cheap proxies <a href="https://t.me/Proxysoxybot?start=r_6255908">here</a> with my ref. 
 
 I have a lot of other stuff irl, so gonna release an update on the end of Sep - Mid Oct with stats based methods. Also I have designed a live score scraper with socket.io, need a lot of time to release a first stable ver, ill be in touch after 1.0.0 release of hltv-async-api (gonna rename it). 
-Dont forget to star a repo. Ty
+Dont forget to star a repo.
 
-# 
+# Future
 
 * **0.10.0** stats & images update, more stats scrapers, team logos, player photos, images, more data, team_map stats, map stats, more functions such as get_news_id, get_team_logo, get_player_photo, get_demo_id, get_match_stats. Coverage. (?) Rotating user agent
 
