@@ -4,7 +4,7 @@
 
 From today Im starting to write a Selenium based parser
 
-I have a lot of other stuff irl, so gonna release an update on the end of Sep - Mid Oct with stats based methods. Also I have designed a live score scraper with socket.io, need a lot of time to release a first stable ver, ill be in touch after 1.0.0 (Selenium upd) of hltv-async-api (gonna rename it). 
+I have a lot of other stuff irl, so gonna release an update on the end of Sep - Mid Nov with stats based methods. Also I have designed a live score scraper with socket.io, need a lot of time to release a first stable ver, ill be in touch after 1.0.0 (Selenium upd) of hltv-async-api (gonna rename it). 
 
 Dont forget to star a repo.
 
