@@ -2,7 +2,7 @@
 
 # IMPORTANT
 
-Selenium non-detectable driver update will be released in September-October 2025
+Selenium update with undetectable driver will be released in September-October 2025
 
 Dont forget to star a repo.
 
