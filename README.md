@@ -2,7 +2,7 @@
 
 # IMPORTANT
 
-Selenium update with undetectable driver will be released in September-October 2025
+HLTV sits behind Cloudflare and often answers plain HTTP requests with **403**. An optional **Selenium undetected driver** is now available: see [Selenium (undetected driver)](#selenium-undetected-driver).
 
 Dont forget to star a repo.
 
@@ -39,6 +39,13 @@ Dont forget to star a repo.
 pip install hltv-async-api
 ```
 
+Optional extras:
+
+```
+pip install "hltv-async-api[sync]"      # synchronous client (requests)
+pip install "hltv-async-api[selenium]"  # undetected Chrome driver, use it when HLTV answers 403
+```
+
 ---
 
 
@@ -73,6 +80,81 @@ pip install hltv-async-api
   
   ```
 
+
+---
+
+# Selenium (undetected driver)
+
+HLTV protects its pages with Cloudflare, so plain HTTP requests often fail with `403`. When that happens the library
+logs a hint once:
+
+```
+[ERROR] | HLTV answered 403 / Cloudflare challenge, plain HTTP requests are being blocked. Install the optional browser
+driver with: pip install "hltv-async-api[selenium]" and create the client with Hltv(selenium=True).
+```
+
+The optional driver opens a real Chrome window through [undetected-chromedriver](https://github.com/ultrafunkamsterdam/undetected-chromedriver)
+and reads the pages from it. Every method keeps the same name, arguments and output; only the way pages are fetched changes.
+
+**Requirements**
+
+* Google Chrome installed on the machine.
+* `pip install "hltv-async-api[selenium]"`. On the first run undetected-chromedriver downloads a ChromeDriver that
+  matches your Chrome version.
+
+**Async usage**
+
+```
+import asyncio
+from hltv_async_api import Hltv
+
+
+async def main():
+    async with Hltv(selenium=True) as hltv:   # the browser is closed when the block ends
+        print(await hltv.get_top_teams(5))
+        print(await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
+
+
+if __name__ == '__main__':
+    asyncio.run(main())
+```
+
+**Sync usage**
+
+```
+from hltv_async_api.sync import Hltv
+
+with Hltv(selenium=True) as hltv:
+    print(hltv.get_top_teams(5))
+```
+
+Without `with`, call `await hltv.close()` (async) or `hltv.close()` (sync) when you are done, otherwise Chrome stays open.
+
+**Options**
+
+Pass them as a dict in `selenium_options`:
+
+```
+hltv = Hltv(selenium=True, selenium_options={
+    'headless': False,                 # Cloudflare detects headless Chrome more often, so the default is False
+    'version_main': 130,               # force the ChromeDriver for this Chrome major version
+    'challenge_timeout': 30,           # seconds to wait for the Cloudflare check to finish on its own
+    'page_load_timeout': 30,           # seconds to wait for a page to load
+    'proxy': 'http://1.2.3.4:8080',
+    'user_data_dir': './chrome-profile',   # keeps the Cloudflare clearance cookie between runs
+})
+```
+
+**Good to know**
+
+* Pages are fetched one at a time through a single browser, so `asyncio.gather` over many requests is not faster than
+  running them one after another. Expect a few seconds per page.
+* `max_retries` is respected (3 attempts when it is `0`). `min_delay`, `max_delay` and the proxy options of the HTTP
+  client are not used in this mode; use `proxy` in `selenium_options` instead.
+* It does not guarantee a pass: Cloudflare changes its checks regularly. If a page never gets through, the method
+  returns `None` and logs `Connection failed`. Try `user_data_dir`, a different `version_main`, or a clean IP.
+* If the extra is missing, `Hltv(selenium=True)` raises an `ImportError` telling you what to install.
+* Use it responsibly and respect HLTV's terms and `robots.txt`. The library is meant for non-commercial use.
 
 ---
 
@@ -168,6 +250,14 @@ pip install hltv-async-api
 * aiohttp_session: aiohttp.ClientSession | None = None
 
     Custom aiohttp session, if you want to use your own session.
+
+* selenium: bool = False
+
+    Fetch pages with an undetected Chrome driver instead of plain HTTP requests. Needs `pip install "hltv-async-api[selenium]"`, see [Selenium (undetected driver)](#selenium-undetected-driver).
+
+* selenium_options: dict | None = None
+
+    Options for the Selenium driver: `headless`, `version_main`, `challenge_timeout`, `page_load_timeout`, `proxy`, `user_data_dir`.
 
 ---
 

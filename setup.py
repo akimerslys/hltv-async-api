@@ -25,6 +25,11 @@ setup(
         'sync': [
             'requests',
         ],
+        'selenium': [
+            'selenium>=4.0',
+            'undetected-chromedriver>=3.5',
+            'setuptools',  # undetected-chromedriver imports distutils, removed from Python 3.12+
+        ],
         'beta': [
             'uvloop',
         ]

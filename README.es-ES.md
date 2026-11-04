@@ -4,7 +4,7 @@
 
 # IMPORTANTE
 
-Se lanzará una actualización de Selenium con controlador indetectable en septiembre-octubre de 2025
+HLTV está detrás de Cloudflare y a menudo responde con **403** a las peticiones HTTP normales. Ya hay disponible un **controlador indetectable de Selenium** opcional: consulta [Selenium (controlador indetectable)](#selenium-controlador-indetectable).
 
 No olvides darle estrella al repositorio.
 
@@ -41,6 +41,13 @@ No olvides darle estrella al repositorio.
 pip install hltv-async-api
 ```
 
+Extras opcionales:
+
+```
+pip install "hltv-async-api[sync]"      # cliente sincrónico (requests)
+pip install "hltv-async-api[selenium]"  # controlador Chrome indetectable, úsalo cuando HLTV responda 403
+```
+
 ---
 
 
@@ -75,6 +82,81 @@ pip install hltv-async-api
   
   ```
 
+
+---
+
+# Selenium (controlador indetectable)
+
+HLTV protege sus páginas con Cloudflare, por lo que las peticiones HTTP normales suelen fallar con `403`. Cuando
+ocurre, la biblioteca muestra una sola vez este aviso (en inglés):
+
+```
+[ERROR] | HLTV answered 403 / Cloudflare challenge, plain HTTP requests are being blocked. Install the optional browser
+driver with: pip install "hltv-async-api[selenium]" and create the client with Hltv(selenium=True).
+```
+
+El controlador opcional abre una ventana real de Chrome con [undetected-chromedriver](https://github.com/ultrafunkamsterdam/undetected-chromedriver)
+y lee las páginas desde ella. Todos los métodos conservan el mismo nombre, argumentos y resultado; solo cambia la forma de obtener las páginas.
+
+**Requisitos**
+
+* Google Chrome instalado en el equipo.
+* `pip install "hltv-async-api[selenium]"`. En la primera ejecución undetected-chromedriver descarga un ChromeDriver
+  compatible con tu versión de Chrome.
+
+**Uso asíncrono**
+
+```
+import asyncio
+from hltv_async_api import Hltv
+
+
+async def main():
+    async with Hltv(selenium=True) as hltv:   # el navegador se cierra al terminar el bloque
+        print(await hltv.get_top_teams(5))
+        print(await hltv.get_event_info(7148, 'PGL CS2 Major Copenhagen2024'))
+
+
+if __name__ == '__main__':
+    asyncio.run(main())
+```
+
+**Uso sincrónico**
+
+```
+from hltv_async_api.sync import Hltv
+
+with Hltv(selenium=True) as hltv:
+    print(hltv.get_top_teams(5))
+```
+
+Sin `with`, llama a `await hltv.close()` (asíncrono) o `hltv.close()` (sincrónico) al terminar; si no, Chrome queda abierto.
+
+**Opciones**
+
+Pásalas como diccionario en `selenium_options`:
+
+```
+hltv = Hltv(selenium=True, selenium_options={
+    'headless': False,                 # Cloudflare detecta más a menudo Chrome sin ventana, por eso el valor por defecto es False
+    'version_main': 130,               # fuerza el ChromeDriver de esta versión principal de Chrome
+    'challenge_timeout': 30,           # segundos de espera a que termine por sí sola la verificación de Cloudflare
+    'page_load_timeout': 30,           # segundos de espera a que cargue una página
+    'proxy': 'http://1.2.3.4:8080',
+    'user_data_dir': './chrome-profile',   # conserva la cookie de Cloudflare entre ejecuciones
+})
+```
+
+**Conviene saber**
+
+* Las páginas se obtienen una a una con un único navegador, así que usar `asyncio.gather` con muchas peticiones no es
+  más rápido que hacerlas en secuencia. Cuenta con unos segundos por página.
+* Se respeta `max_retries` (3 intentos si vale `0`). `min_delay`, `max_delay` y las opciones de proxy del cliente HTTP
+  no se usan en este modo; usa `proxy` en `selenium_options`.
+* No garantiza el acceso: Cloudflare cambia sus comprobaciones con frecuencia. Si una página no pasa, el método
+  devuelve `None` y registra `Connection failed`. Prueba con `user_data_dir`, otra `version_main` o una IP limpia.
+* Si falta el extra, `Hltv(selenium=True)` lanza un `ImportError` indicando qué instalar.
+* Úsalo con responsabilidad y respeta los términos y el `robots.txt` de HLTV. La biblioteca es para uso no comercial.
 
 ---
 
@@ -170,6 +252,14 @@ pip install hltv-async-api
 * aiohttp_session: aiohttp.ClientSession | None = None
 
     Sesión personalizada de aiohttp, si deseas usar tu propia sesión.
+
+* selenium: bool = False
+
+    Obtiene las páginas con un controlador Chrome indetectable en lugar de peticiones HTTP normales. Requiere `pip install "hltv-async-api[selenium]"`, consulta [Selenium (controlador indetectable)](#selenium-controlador-indetectable).
+
+* selenium_options: dict | None = None
+
+    Opciones del controlador de Selenium: `headless`, `version_main`, `challenge_timeout`, `page_load_timeout`, `proxy`, `user_data_dir`.
 
 ---
 

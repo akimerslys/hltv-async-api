@@ -8,6 +8,7 @@ import pytz
 from bs4 import BeautifulSoup
 
 from hltv_async_api.methods import Matches, Teams, Events, Players, News
+from hltv_async_api.Utils.hints import BLOCKED_HINT
 import requests
 
 
@@ -26,6 +27,8 @@ class Hltv:
                  safe_mode: bool = False,
                  debug: bool = False,
                  session: requests.Session | None = None,
+                 selenium: bool = False,
+                 selenium_options: dict | None = None,
                  ):
 
         self.headers = {
@@ -85,11 +88,22 @@ class Hltv:
         self.NEWS = News(self.TIMEZONE)
         self.session = session or requests.Session()
 
+        self._blocked = False
+        self._hint_shown = False
+        self._driver = None
+        if selenium:
+            from hltv_async_api.selenium_driver import SeleniumDriver
+            self._driver = SeleniumDriver(logger=self.logger, **(selenium_options or {}))
+
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
+        self.close()
+
+    def close(self):
+        if self._driver is not None:
+            self._driver.close()
 
     def _configure_logging(self):
         def get_logger(name, **kwargs):
@@ -238,12 +252,15 @@ class Hltv:
             proxies = {'http': proxy, 'https': proxy} if proxy else None
             response = self.session.get(url, headers=self.headers, proxies=proxies, timeout=self.timeout)
             self.logger.info(f"Fetching {url}, code: {response.status_code}")
+            if response.status_code == 403:
+                self._blocked = True
             if response.status_code == 200:
                 result = response.text
                 page = self._f(result)
                 forbidden = self._cloudflare_check(page)
                 if not forbidden:
                     return True, page
+                self._blocked = True
 
                 self.logger.debug(f"Error, Code {response.status_code=}")
                 return False, self._parse_error_handler(delay)
@@ -254,7 +271,22 @@ class Hltv:
         delay = self._parse_error_handler(delay)
         return False, delay
 
+    def _fetch_selenium(self, url):
+        attempts = self.max_retries or 3
+        for attempt in range(1, attempts + 1):
+            self.logger.debug(f'Selenium fetching {url}, try {attempt}/{attempts}')
+            html = self._driver.get_html(url)
+            if html:
+                page = self._f(html)
+                if not self._cloudflare_check(page):
+                    return page
+            time.sleep(attempt)
+        self.logger.error('Connection failed')
+        return None
+
     def _fetch(self, url, delay: int = 0):
+        if self._driver is not None:
+            return self._fetch_selenium(url)
 
         status = False
         try_ = 1
@@ -276,6 +308,9 @@ class Hltv:
             return result
         else:
             self.logger.error('Connection failed')
+            if self._blocked and not self._hint_shown:
+                self._hint_shown = True
+                self.logger.error(BLOCKED_HINT)
             return None
 
     def get_matches(self, days: int = 1, min_rating: int = 1, live: bool = True, future: bool = True):

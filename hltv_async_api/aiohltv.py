@@ -26,7 +26,15 @@ class Hltv:
                  tz: str | None = None,
                  safe_mode: bool = False,
                  debug: bool = False,
+                 selenium: bool = False,
+                 selenium_options: dict | None = None,
                  ):
+        """
+        :param selenium: fetch pages with an undetected Chrome driver instead of plain HTTP requests.
+            Needs ``pip install hltv-async-api[selenium]`` and Google Chrome. Use it when HLTV answers 403.
+        :param selenium_options: keyword arguments for ``hltv_async_api.selenium_driver.SeleniumDriver``
+            (headless, version_main, proxy, user_data_dir, challenge_timeout, ...).
+        """
         self.DEBUG = debug
         self._configure_logging()
         self.logger = logging.getLogger(__name__)
@@ -55,7 +63,11 @@ class Hltv:
         self.EXECUTOR = executor
 
         if parser is None:
-            parser = Parser(self.client, self.EXECUTOR, self.logger)
+            if selenium:
+                from hltv_async_api.selenium_driver import SeleniumParser
+                parser = SeleniumParser(self.client, self.EXECUTOR, self.logger, **(selenium_options or {}))
+            else:
+                parser = Parser(self.client, self.EXECUTOR, self.logger)
 
         self.PARSER = parser
 
@@ -79,6 +91,8 @@ class Hltv:
             self.logger.debug('Closing Session')
             await self.client.session.close()
             self.session = None
+        if hasattr(self.PARSER, 'close'):
+            await self.PARSER.close()
         if self.EXECUTOR:
             self.EXECUTOR.close()
 

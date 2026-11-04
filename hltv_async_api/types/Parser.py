@@ -2,6 +2,8 @@ import asyncio
 import random
 from bs4 import BeautifulSoup
 
+from hltv_async_api.Utils.hints import BLOCKED_HINT
+
 
 class Parser:
     def __init__(self, client, executor, logger):
@@ -9,6 +11,8 @@ class Parser:
         self.client = client
         self.session = client.session
         self.executor = executor
+        self.blocked = False
+        self._hint_shown = False
 
     @staticmethod
     def _f(result):
@@ -55,6 +59,9 @@ class Parser:
                     forbidden = await self.executor.run(self._cloudflare_check, page)
                     if not forbidden:
                         return True, page
+                    self.blocked = True
+                elif response.status == 403:
+                    self.blocked = True
 
                 self.logger.debug(f"Error, Code {response.status=}")
                 return False, await self.executor.run(self._parse_error_handler, delay)
@@ -88,4 +95,7 @@ class Parser:
             return result
         else:
             self.logger.error('Connection failed')
+            if self.blocked and not self._hint_shown:
+                self._hint_shown = True
+                self.logger.error(BLOCKED_HINT)
             return None
