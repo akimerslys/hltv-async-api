@@ -4,10 +4,10 @@ import pytz
 
 
 def localize_datetime_to_timezone(TIMEZONE, date_: datetime = None, date_str: str = None) -> datetime:
-        if not TIMEZONE:
-            return date_
         if date_str:
             date_ = datetime.strptime(date_str, '%d-%m-%Y')
+        if not TIMEZONE:
+            return date_
         if date_.tzinfo:
             return date_.astimezone(pytz.timezone(TIMEZONE))
 

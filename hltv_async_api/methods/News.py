@@ -8,24 +8,24 @@ class News:
         self.TIMEZONE = TIMEZONE
 
     def get_last_news(self, r, max_reg_news=2, only_today=True, only_featured=False):
-        today = datetime.now(tz=pytz.timezone(self.TIMEZONE))
+        today = datetime.now(tz=pytz.timezone(self.TIMEZONE or 'Europe/Copenhagen'))
         article_days = {
             1: today.strftime('%d-%m'),
-            2: (today - datetime.timedelta(days=1)).strftime('%d-%m'),
+            2: (today - timedelta(days=1)).strftime('%d-%m'),
             3: 'old'
         }
 
         news = []
         reg_news_num = 0
         for i, news_date_div in enumerate(r.find_all('div', {'class', 'standard-box standard-list'}), start=1):
-            date_ = article_days[i]
+            date_ = article_days.get(i, 'old')
             f_news = []
             reg_news = []
             for featured_news_div in news_date_div.find_all('a',
                                                             {'class': 'newsline article featured breaking-featured'}):
                 featured_id = featured_news_div['href'].split('/')[2]
-                featured_title = featured_news_div.find('div', {'class': 'featured-newstext'}).text
-                featured_description = featured_news_div.find('div', {'class': 'featured-small-newstext'}).text
+                featured_title = featured_news_div.find('div', {'class': 'featured-newstext'}).text.strip()
+                featured_description = featured_news_div.find('div', {'class': 'featured-small-newstext'}).text.strip()
                 f_news.append({
                     'f_id': featured_id,
                     'f_title': featured_title,
@@ -35,12 +35,12 @@ class News:
             if not only_featured and reg_news_num < max_reg_news:
                 for news_div in news_date_div.find_all('a',
                                                        {'class': 'newsline article'}):
-                    if reg_news_num > max_reg_news:
+                    if reg_news_num >= max_reg_news:
                         break
                     if news_div['class'] != 'newsline article featured breaking-featured':
                         news_id = news_div['href'].split('/')[2]
-                        news_title = news_div.find('div', {'class': 'newstext'}).text
-                        news_posted = news_div.find('div', {'class': 'newsrecent'}).text
+                        news_title = news_div.find('div', {'class': 'newstext'}).text.strip()
+                        news_posted = news_div.find('div', {'class': 'newsrecent'}).text.strip()
 
                         reg_news.append({
                             'id': news_id,

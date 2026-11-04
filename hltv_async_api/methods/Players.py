@@ -1,3 +1,6 @@
+import re
+
+
 class Players:
     def __init__(self, tz):
         self.TZ = tz
@@ -50,52 +53,58 @@ class Players:
             player['team'] = team_div.get_text().strip()
             player['team_id'] = int(team_div['href'].split('/', 3)[2])
         except (AttributeError, TypeError):
-            team_str = '?'
-            team_id = 0
+            player['team'] = '?'
+            player['team_id'] = 0
 
         name_div = r.find('div', class_='playerRealname')
         player['name'] = name_div.get_text().strip()
-        player['nationality'] = name_div.find('img')['title']
+        flag = name_div.find('img')
+        for parent in name_div.parents:
+            if flag:
+                break
+            flag = parent.find('img', class_='flag')
+        player['nationality'] = flag.get('title', '') if flag else ''
 
-        player['age'] = int(
-            r.find('div', class_='playerInfoRow playerAge').find('span', class_='listRight').get_text().strip().split()[
-                0])
+        age_div = r.find('div', class_='playerInfoRow playerAge')
+        age = re.search(r'\d+', age_div.find('span', class_='listRight').get_text()) if age_div else None
+        player['age'] = int(age.group()) if age else 0
 
-        rating_div = r.find('div', class_='playerpage-container').find_all('span', class_='statsVal')
-        player['rating'] = rating_div[0].get_text().strip()
-        player['kpr'] = rating_div[1].get_text().strip()
-        player['hs'] = rating_div[2].get_text().strip()
+        # HLTV reworked this block: only rating and headshot ratio are still published as plain numbers.
+        player['rating'] = ''
+        for stat in r.select('div.player-stat'):
+            label = stat.find('b')
+            value = stat.find('span', class_='statsVal')
+            if label and value and label.get_text(strip=True).lower().startswith('rating'):
+                player['rating'] = value.get_text(strip=True)
+                break
+        player['hs'] = ''
+        for stat in r.select('div.all-time-stat'):
+            if 'headshots' in stat.get_text().lower():
+                player['hs'] = stat.find('div', class_='stat').get_text(strip=True)
+                break
 
-        player['img'] = r.find('img', class_='bodyshot-img')['src']
+        img = r.find('img', class_='player-summary-stat-box-left-bodyshot') or r.find('img', class_='bodyshot-img')
+        player['img'] = img['src'] if img else ''
+
+        trophies_div = r.select('div.trophyRow .trophy')
+        player['total_trophies'] = len(trophies_div)
+        player['last_trophy'] = ''
+        for trophy in trophies_div:
+            description = trophy.find('span', class_='trophyDescription')
+            if '/events/' in (trophy.get('href') or '') and description:
+                player['last_trophy'] = description.get('title', '')
+                break
         try:
-            trophies_div = r.find('div', class_='trophyRow').find_all(class_='trophy')
-            player['total_trophies'] = len(trophies_div)
-
-            # Find last trophy
-            last_trophy = ''
-            for trophy in trophies_div:
-                try:
-                    if trophy['href'] and 'events' in trophy['href']:
-                        player['last_trophy'] = trophy.find('span', class_='trophyDescription')['title']
-                        break
-                except (KeyError, TypeError):
-                    player['last_trophy'] = ''
-
-            # Find MVPs
-            try:
-                player['total_mvp'] = int(trophies_div[0].find('div', class_='mvp-count').text)
-            except (IndexError, AttributeError, ValueError):
-                player['total_mvp'] = 0
-
-        except Exception:
-            player['total_trophies'] = 0
-        try:
-            matches = []
-            matches_div = r.find_all('div', class_='col-6 text-ellipsis')[1]
-            for match in matches_div.find_all('a'):
-                matches.append(match['href'].split('/', 4)[3])
-            player['last_matches'] = matches
+            player['total_mvp'] = int(r.find('div', class_='mvp-count').get_text())
         except (AttributeError, ValueError):
-            player['last_matches'] = []
+            player['total_mvp'] = 0
+
+        matches = []
+        for col in r.find_all('div', class_='col-6 text-ellipsis'):
+            if 'matches' in col.get_text().lower()[:40]:
+                for match in col.find_all('a', class_='playerpage-matchbox'):
+                    matches.append(next(p for p in match['href'].split('/') if p.isdigit()))
+                break
+        player['last_matches'] = matches
 
         return player

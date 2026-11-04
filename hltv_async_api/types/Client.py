@@ -103,7 +103,8 @@ class Client:
                 with open(self.PROXY_PATH, "r") as file:
                     self.PROXY_LIST = [line.strip() for line in file.readlines()]
             if self.PROXY_PROTOCOL:
-                self.PROXY_LIST = [self.PROXY_PROTOCOL + '://' + proxy for proxy in self.PROXY_LIST]
+                self.PROXY_LIST = [proxy if not proxy or '://' in proxy else self.PROXY_PROTOCOL + '://' + proxy
+                                   for proxy in self.PROXY_LIST]
 
     def get_proxy(self):
         try:

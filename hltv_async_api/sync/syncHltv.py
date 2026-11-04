@@ -25,7 +25,7 @@ class Hltv:
                  tz: str | None = None,
                  safe_mode: bool = False,
                  debug: bool = False,
-                 session: requests.Session | None = requests.Session(),
+                 session: requests.Session | None = None,
                  ):
 
         self.headers = {
@@ -73,7 +73,8 @@ class Hltv:
                 with open(self.PROXY_PATH, "r") as file:
                     self.PROXY_LIST = [line.strip() for line in file.readlines()]
             if self.PROXY_PROTOCOL:
-                self.PROXY_LIST = [self.PROXY_PROTOCOL + '://' + proxy for proxy in self.PROXY_LIST]
+                self.PROXY_LIST = [proxy if not proxy or '://' in proxy else self.PROXY_PROTOCOL + '://' + proxy
+                                   for proxy in self.PROXY_LIST]
 
         self.SAFE = safe_mode
         self._init_safe()
@@ -82,7 +83,7 @@ class Hltv:
         self.EVENTS = Events(self.TIMEZONE)
         self.PLAYERS = Players(self.TIMEZONE)
         self.NEWS = News(self.TIMEZONE)
-        self.session = session
+        self.session = session or requests.Session()
 
     def __enter__(self):
         return self
@@ -234,8 +235,8 @@ class Hltv:
             # delay, only for non-proxy users. (default = 1-15s)
             time.sleep(delay)
         try:
-            response = self.session.get(url, headers=self.headers, proxies=proxy, timeout=self.timeout)
-            print(response.status_code, response.text)
+            proxies = {'http': proxy, 'https': proxy} if proxy else None
+            response = self.session.get(url, headers=self.headers, proxies=proxies, timeout=self.timeout)
             self.logger.info(f"Fetching {url}, code: {response.status_code}")
             if response.status_code == 200:
                 result = response.text
@@ -367,7 +368,7 @@ class Hltv:
         current_weekday = day.weekday()
         last_monday = day - timedelta(days=current_weekday)
 
-        r = self._fetch("https://www.hltv.org/ranking/teams/" + last_monday.strftime('%Y/%B/%d').lower())
+        r = self._fetch("https://www.hltv.org/ranking/teams/" + last_monday.strftime('%Y/%B/').lower() + str(last_monday.day))
 
         if r:
             return self.TEAMS.get_top_teams(r, max_teams)
@@ -387,7 +388,7 @@ class Hltv:
         if r:
             return self.TEAMS.get_team_info(r, team_id, title)
 
-    def get_top_players(self, top: int = 40, year: str | int = datetime.strftime(datetime.utcnow(), '%Y')):
+    def get_top_players(self, top: int = 40, year: str | int | None = None):
         """
         returns a list of the top (1-40) players in top 20 at the year
         :params:
@@ -398,6 +399,9 @@ class Hltv:
         """
         if self._checksafe():
             return
+
+        if year is None:
+            year = datetime.now(pytz.utc).year
 
         r = self._fetch(
             f"https://www.hltv.org/stats/players?startDate={year}-01-01&endDate={year}-12-31&rankingFilter=Top20")

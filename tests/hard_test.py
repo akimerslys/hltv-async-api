@@ -3,10 +3,13 @@ from typing import Any, Callable
 import pytest
 
 from hltv_async_api import Hltv
-from hltv_async_api.sync import Hltv as SyncHltv
+from hltv_async_api.sync.syncHltv import Hltv as SyncHltv
 import logging
 import asyncio
+import os
 import time
+
+PROXY_PATH = 'proxies.txt' if os.path.exists('proxies.txt') else None
 
 
 class HltvHardTest:
@@ -75,7 +78,7 @@ class HltvHardTest:
         #self.log_results(start_time)
         return round(time.time() - start_time, 4)
 
-    def log_results(self, start_time):
+    def log_results(self, elapsed):
         self.logger.info(self.matches)
         self.logger.info(self.events)
         self.logger.info(self.teams)
@@ -83,7 +86,7 @@ class HltvHardTest:
         self.logger.info(f'ERRORS={self.errors}')
         self.logger.info(f'SUCCESS={self.success}')
         self.logger.info(f'Total parsed={self.success + self.errors}')
-        self.logger.info(f'Total time {round(time.time() - start_time, 4)}')
+        self.logger.info(f'Total time {elapsed}')
 
     async def parse_matches_results(self):
         start_time = time.time()
@@ -99,7 +102,7 @@ class HltvHardTest:
         if not results:
             err += 1
             self.logger.error('ERROR PARSING RESULTS')
-        matches = matches + results
+        matches = (matches or []) + (results or [])
         if matches:
             self.success += 1
             self.logger.debug(matches)
@@ -267,7 +270,7 @@ class HltvHardTest:
         if not results:
             err += 1
             self.logger.error('ERROR PARSING RESULTS')
-        matches = matches + results
+        matches = (matches or []) + (results or [])
 
         if matches:
             self.success += 1
@@ -420,7 +423,7 @@ class HltvHardTest:
 
 @pytest.mark.asyncio
 async def main():
-    hltv = Hltv(debug=True, safe_mode=False, min_delay=0.5, max_delay=2.5, max_retries=10, proxy_path='proxies.txt', proxy_delay=True)
+    hltv = Hltv(debug=True, safe_mode=False, min_delay=0.5, max_delay=2.5, max_retries=10, proxy_path=PROXY_PATH, proxy_delay=bool(PROXY_PATH))
     test = HltvHardTest(hltv=hltv, debug=True)
     return await test.start_test(), test
 
@@ -428,7 +431,7 @@ async def main():
 
 @pytest.mark.sync
 def sync_test():
-    hltv = SyncHltv(debug=True, safe_mode=False, min_delay=0.5, max_delay=2.5, max_retries=10, proxy_path='proxies.txt', proxy_delay=True)
+    hltv = SyncHltv(debug=True, safe_mode=False, min_delay=0.5, max_delay=2.5, max_retries=10, proxy_path=PROXY_PATH, proxy_delay=bool(PROXY_PATH))
     test = HltvHardTest(hltv=hltv, debug=True)
     return test.start_test_sync(), test
 

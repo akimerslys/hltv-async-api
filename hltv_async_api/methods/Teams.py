@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 
@@ -58,16 +59,18 @@ class Teams:
             # unknown_players = {'unknown' + str(i): 0 for i in range(len(players) + 1, 6)}
             # players.update(unknown_players)
 
-            for i, stat in enumerate(r.find_all('div', {'class': 'profile-team-stat'}), start=1):
+            for stat in r.find_all('div', {'class': 'profile-team-stat'}):
+                label = (stat.find('b').get_text(strip=True) if stat.find('b') else '').lower()
+                value = stat.find('span', {'class': 'right'})
                 try:
-                    if i == 1:
-                        team['rank'] = stat.find('a').text[1:]
-                    elif i == 2:
-                        team['weekstop30'] = stat.find('span', {'class': 'right'}).text
-                    elif i == 3:
-                        team['age'] = stat.find('span', {'class': 'right'}).text
-                    elif i == 4:
-                        team['coach'] = stat.find('span', {'class': 'bold a-default'}).text[1:-1]
+                    if label == 'world ranking':
+                        team['rank'] = re.search(r'#(\d+)', value.get_text()).group(1)
+                    elif label.startswith('weeks in top'):
+                        team['weekstop30'] = value.get_text(strip=True)
+                    elif label == 'average player age':
+                        team['age'] = value.get_text(strip=True)
+                    elif label == 'coach':
+                        team['coach'] = stat.find('span', {'class': 'bold a-default'}).get_text().strip("' ")
                 except AttributeError:
                     pass
             try:

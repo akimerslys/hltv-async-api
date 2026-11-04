@@ -10,12 +10,15 @@ setup(
     long_description_content_type='text/markdown',
     url='https://github.com/akimerslys/hltv-async-api',
     packages=find_packages(),
+    python_requires='>=3.10',
 
     install_requires=[
         'aiohttp',
         'pytz',
         'lxml',
         'beautifulsoup4',
+        'fake-useragent',
+        'Brotli',
     ],
 
     extras_require={

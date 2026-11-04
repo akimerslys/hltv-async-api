@@ -241,10 +241,10 @@ class Hltv:
         if r:
             return await self._run(self.EVENTS.get_event_results, r, event_id, days, max_)
 
-    async def get_event_matches(self, event_id: str | int, days: int = 1):
+    async def get_event_matches(self, event_id: str | int, days: int = 1, max_: int = 10):
         r = await self._fetch("https://www.hltv.org/events/" + str(event_id) + "/matches")
         if r:
-            return await self._run(self.EVENTS.get_event_matches, r, event_id, days)
+            return await self._run(self.EVENTS.get_event_matches, r, event_id, days, max_)
 
     #DELETE ? // repair ??
     """async def get_featured_events(self, max_: int = 1):
@@ -308,7 +308,7 @@ class Hltv:
         current_weekday = day.weekday()
         last_monday = day - timedelta(days=current_weekday)
 
-        r = await self._fetch("https://www.hltv.org/ranking/teams/" + last_monday.strftime('%Y/%B/%d').lower())
+        r = await self._fetch("https://www.hltv.org/ranking/teams/" + last_monday.strftime('%Y/%B/').lower() + str(last_monday.day))
 
         if r:
             return await self._run(self.TEAMS.get_top_teams, r, max_teams)
@@ -328,7 +328,7 @@ class Hltv:
         if r:
             return await self._run(self.TEAMS.get_team_info, r, team_id, title)
 
-    async def get_top_players(self, top: int = 40, year: str | int = datetime.strftime(datetime.utcnow(), '%Y')):
+    async def get_top_players(self, top: int = 40, year: str | int | None = None):
         """
         returns a list of the top (1-40) players in top 20 at the year
         :params:
@@ -339,6 +339,9 @@ class Hltv:
         """
         if self._checksafe():
             return
+
+        if year is None:
+            year = datetime.now(pytz.utc).year
 
         r = await self._fetch(
             f"https://www.hltv.org/stats/players?startDate={year}-01-01&endDate={year}-12-31&rankingFilter=Top20")

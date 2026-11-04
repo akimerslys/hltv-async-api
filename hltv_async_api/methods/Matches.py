@@ -13,100 +13,70 @@ class Matches:
     @staticmethod
     def _get_match_status(status):
         status_ = {'Match over': 0, 'LIVE': 1}
-        return status_[status] if status in status_ else 2
+        if status in status_:
+            return status_[status]
+        # 2 = upcoming (countdown such as '1d : 2h : 3m : 4s'), 3 = anything else, e.g. 'Match postponed'
+        return 2 if re.search(r'\d+\s*[dhms](?![a-z])', status) else 3
+
+    @staticmethod
+    def _match_base(div) -> dict:
+        """Fields shared by live and upcoming entries of the matches page."""
+        id_ = div.get('data-match-id') or 0
+        t1_id = div.get('team1') or 0
+        t2_id = div.get('team2') or 0
+        names = []
+        for team_div in div.select('.match-teams .match-team')[:2]:
+            name = team_div.find(class_='match-teamname')
+            names.append(name.get_text(strip=True) if name else 'TBD')
+        team1, team2 = (names + ['TBD', 'TBD'])[:2]
+
+        maps = ''
+        for meta in div.select('.match-meta'):
+            text = meta.get_text(strip=True)
+            if text.startswith('bo'):
+                maps = text[-1:]
+                break
+
+        logo = div.select_one('img.match-event-logo')
+        if logo and logo.get('title'):
+            event = logo['title']
+        else:
+            event_div = div.select_one('.match-event')
+            event = event_div.get_text(strip=True) if event_div else ''
+
+        return {'id': id_, 'team1': team1, 'team2': team2, 't1_id': t1_id, 't2_id': t2_id,
+                'maps': maps, 'rating': int(div.get('data-stars') or 0), 'event': event}
 
     def get_matches(self, r: BeautifulSoup, days: int = 1, min_rating: int = 1, live: bool = True, future: bool = True):
         """returns a list of all upcoming matches on HLTV"""
 
         matches = []
+        fields = ('team1', 'team2', 't1_id', 't2_id', 'maps', 'rating', 'event')
 
         try:
             if live:
-                for live_div in r.find_all('div', class_='liveMatch-container'):
-                    rating = int(live_div['stars'])
-                    if rating >= min_rating:
-                        id = live_div['data-scorebot-id']
-                        t1_id = live_div['team1']
-                        t2_id = live_div['team2']
-                        teams = live_div.find_all('div', {'class': 'matchTeamName text-ellipsis'})
-                        team1 = teams[0].text
-                        team2 = teams[1].text
-                        maps = live_div.find('div', {'class': 'matchMeta'}).text[-1:]
-                        try:
-                            event = live_div.find('div', {'class', 'matchEventName gtSmartphone-only'}).text
-                        except AttributeError:
-                            try:
-                                event = live_div.find('span', {'class': 'line-clamp-3'}).text
-                            except AttributeError:
-                                event = ''
-
-                        matches.append({
-                            'id': id,
-                            'date': 'LIVE',
-                            'time': 'LIVE',
-                            'team1': team1,
-                            'team2': team2,
-                            't1_id': t1_id,
-                            't2_id': t2_id,
-                            'maps': maps,
-                            'rating': rating,
-                            'event': event
-                        })
+                for live_div in r.select('div.liveMatchesSection div.match-wrapper'):
+                    base = self._match_base(live_div)
+                    if base['rating'] >= min_rating:
+                        matches.append({'id': base['id'], 'date': 'LIVE', 'time': 'LIVE',
+                                        **{k: base[k] for k in fields}})
 
             if future:
-                for i, date_div in enumerate(r.find_all('div', {'class': 'upcomingMatchesSection'}), start=1):
+                for i, date_div in enumerate(r.select('div.matches-list-section'), start=1):
                     if i > days:
                         break
-                    date_ = date_div.find('span', {'class': 'matchDayHeadline'}).text.split()[-1]
+                    date_ = date_div.find(class_='matches-list-headline').get_text().split()[-1]
 
-                    for match in date_div.find_all('div', {'class': 'upcomingMatch'}):
-                        time_ = match.find('div', {'class': 'matchTime'}).text
+                    for match in date_div.select('div.match-wrapper'):
+                        base = self._match_base(match)
+                        if base['rating'] < min_rating:
+                            continue
+                        time_ = match.find(class_='match-time').get_text(strip=True)
                         dtime_ = datetime.strptime(date_ + '/' + time_, "%Y-%m-%d/%H:%M")
                         dtime = dt.localize_datetime_to_timezone(self.TIMEZONE, date_=dtime_)
-                        rating = int(match['stars'])
-                        if rating >= min_rating:
-                            id_ = 0
-                            t1_id = 0
-                            t2_id = 0
-                            team1 = 'TBD'
-                            team2 = 'TBD'
 
-                            try:
-                                id_ = match.find('a')['href'].split('/')[2]
-                                t1_id = match['team1']
-                                t2_id = match['team2']
-                            except (IndexError, AttributeError, KeyError):
-                                pass
-                            maps = match.find('div', {'class': 'matchMeta'}).text[-1:]
-                            try:
-                                teams = match.find_all('div', {'class': 'matchTeamName text-ellipsis'})
-
-                                team1 = teams[0].text
-                                team2 = teams[1].text
-                            except (IndexError, AttributeError):
-                                pass
-
-                            try:
-                                event = match.find('div', {'class', 'matchEventName gtSmartphone-only'}).text
-                            except AttributeError:
-
-                                try:
-                                    event = match.find('span', {'class': 'line-clamp-3'}).text
-                                except AttributeError:
-                                    event = ''
-
-                            matches.append({
-                                'id': id_,
-                                'date': dtime.strftime('%d-%m-%Y'),
-                                'time': dtime.strftime('%H:%M'),
-                                'team1': team1,
-                                'team2': team2,
-                                't1_id': t1_id,
-                                't2_id': t2_id,
-                                'maps': maps,
-                                'rating': rating,
-                                'event': event
-                            })
+                        matches.append({'id': base['id'], 'date': dtime.strftime('%d-%m-%Y'),
+                                        'time': dtime.strftime('%H:%M'), **{k: base[k] for k in fields}})
 
         except AttributeError:
             return None
@@ -115,9 +85,9 @@ class Matches:
 
     def get_match_info(self, r: BeautifulSoup, id_, team1, team2, event, stats: bool = True, predicts: bool = True):
 
-        status = r.find('div', {'class': 'countdown'})
+        status = r.find('div', {'class': 'countdown'}).text.strip()
 
-        status_int = self._get_match_status(status).text
+        status_int = self._get_match_status(status)
 
         match_info = {'id': id_}
 
@@ -183,7 +153,7 @@ class Matches:
             stats_ = []
             for table_div in r.find_all('table', {'class': 'table totalstats'})[:2]:
                 for player in table_div.find_all('tr')[1:]:
-                    player_id = player.find('a', class_='flagAlign')['href'].split('/')[2]
+                    player_id = player.find('a', href=re.compile(r'^/player/\d+'))['href'].split('/')[2]
                     player_name = player.find('div', class_='statsPlayerName').text.strip()
                     nickname = re.findall(r"'(.*?)'", player_name)[0]
 
@@ -221,7 +191,7 @@ class Matches:
                 except ValueError:
                     pass
 
-        if predicts and status != 0:
+        if predicts and status_int != 0:
             try:
                 predict_div = r.find('div', class_='standard-box pick-a-winner').find_all('div', class_='percentage')
                 match_info['predict1'] = predict_div[0].text
@@ -247,7 +217,7 @@ class Matches:
                 for res in big_res:
 
                     try:
-                        rating = len(big_res.find_all('i', {'class': 'fa fa-star star'}))
+                        rating = len(res.find_all('i', {'class': 'fa fa-star star'}))
                     except AttributeError:
                         rating = 0
 
@@ -282,12 +252,12 @@ class Matches:
                 if i > days: break
                 try:
                     date__ = dt.normalize_date_(date_div.find('span', class_='standard-headline').text)
-                    date = dt.localize_datetime_to_timezone(date_str=date__).strftime('%d-%m-%Y')
+                    date = dt.localize_datetime_to_timezone(self.TIMEZONE, date_str=date__).strftime('%d-%m-%Y')
                 except Exception:
                     date = None
 
                 for res in date_div.find_all("a", {"class": "a-reset"}):
-                    if res['href'] == '/forums' or n > max:
+                    if res['href'] == '/forums' or n >= max:
                         break
                     result_ = {}
                     rating = len(res.find_all('i', {'class': 'fa fa-star star'}))

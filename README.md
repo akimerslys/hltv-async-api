@@ -485,7 +485,7 @@ from hltv_async_api.beta import Beta
 
 # Requirements:
 
-Python 3.9+
+Python 3.10+
 
 License:
 HLTV Async is licensed under the MIT License, allowing for personal and commercial use with minimal restrictions.
