@@ -30,6 +30,9 @@ setup(
             'undetected-chromedriver>=3.5',
             'setuptools',  # undetected-chromedriver imports distutils, removed from Python 3.12+
         ],
+        'live': [
+            'python-socketio[asyncio_client]>=5.11',
+        ],
         'beta': [
             'uvloop',
         ]

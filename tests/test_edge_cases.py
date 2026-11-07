@@ -45,7 +45,7 @@ def test_player_page_with_missing_parts():
             '<div class="player-stat"><span class="statsVal">1.0</span></div>'
             '<div class="trophyRow"><a class="trophy" href="/events/1/x"></a></div>')
     info = Players('x').get_player_info(fx.soup(html), 1, 'x')
-    assert info['name'] == 'Some One' and info['rating'] == '' and info['last_trophy'] == ''
+    assert info['name'] == 'Some One' and info['rating'] == 0.0 and info['last_trophy'] == ''
     assert (info['team'], info['team_id'], info['nationality'], info['age']) == ('?', 0, '', 0)
     assert info['total_trophies'] == 1 and info['total_mvp'] == 0 and info['last_matches'] == []
 

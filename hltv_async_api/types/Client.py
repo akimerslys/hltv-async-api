@@ -1,7 +1,7 @@
 import random
 from typing import Optional, Union
 from fake_useragent import UserAgent
-from aiohttp import ClientSession
+from aiohttp import ClientSession, ClientTimeout, TCPConnector
 import logging
 
 
@@ -17,21 +17,30 @@ class Client:
                  proxy_protocol: str | None = None,
                  remove_proxy: bool = False,
                  user_agent: str = None,
+                 max_concurrency: Optional[int] = None,
                  logger=logging.getLogger(),
                  ):
+        """
+        :param min_delay: / ``max_delay``: pause between retries. Nothing is waited unless you set them;
+            with only ``max_delay`` the pause grows by 1s per failed try up to that value.
+        :param max_concurrency: how many requests may be in flight at once (default 10, 0 = unlimited).
+        """
         if min_delay is None:
             min_delay = -1.0
-        if max_delay is None:
-            max_delay = 10.0
+        elif max_delay is None:
+            max_delay = max(float(min_delay), 10.0)
         if timeout is None:
             timeout = 5
         if max_retries is None:
             max_retries = 10
+        if max_concurrency is None:
+            max_concurrency = 10
+        self.max_concurrency = max_concurrency
 
         self.logger = logger
 
         self.MIN_DELAY = float(min_delay)
-        self.MAX_DELAY = float(max_delay)
+        self.MAX_DELAY = float(max_delay) if max_delay is not None else None
 
         self.UA = UserAgent()
         if user_agent is None:
@@ -79,7 +88,9 @@ class Client:
     def _create_session(self):
         if not self.session:
             self.logger.debug('Creating Session')
-            self.session = ClientSession()
+            self.session = ClientSession(
+                connector=TCPConnector(limit=0, ttl_dns_cache=300),  # concurrency is capped by the Parser
+                timeout=ClientTimeout(total=self.timeout))
 
     def get_session(self):
         if not self.session:
@@ -94,6 +105,8 @@ class Client:
             if self.MAX_DELAY >= self.MIN_DELAY >= 0.0 and self.MAX_DELAY >= 0.0:
                 return
             self.logger.warning(f'Invalid min/max delay. Delay will be increasing by 1 sec')
+            if self.MAX_DELAY is None:
+                self.MAX_DELAY = 10.0
         self.MIN_DELAY = None
 
     def init_proxy(self):

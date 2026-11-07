@@ -8,6 +8,7 @@ import logging
 import asyncio
 import os
 import time
+import traceback
 
 PROXY_PATH = 'proxies.txt' if os.path.exists('proxies.txt') else None
 
@@ -19,6 +20,7 @@ class HltvHardTest:
         logging.basicConfig(level=logging.DEBUG if debug else logging.INFO, format="%(message)s")
         self.errors = 0
         self.success = 0
+        self.failures: list[str] = []
         self.matches: int | str = 0
         self.events: int | str = 0
         self.news: int | str = 0
@@ -87,163 +89,78 @@ class HltvHardTest:
         self.logger.info(f'SUCCESS={self.success}')
         self.logger.info(f'Total parsed={self.success + self.errors}')
         self.logger.info(f'Total time {elapsed}')
+        for failure in self.failures:
+            self.logger.info(f'FAILED {failure}')
+
+    async def _try(self, what: str, call):
+        """Await one library call. Exceptions and empty answers (None) both count as errors and are listed."""
+        try:
+            result = await call
+        except Exception as e:
+            self.errors += 1
+            self.failures.append(f'{what}: {type(e).__name__}: {e}')
+            self.logger.error(f'{what}: {traceback.format_exc()}')
+            return None
+        if result is None:
+            self.errors += 1
+            self.failures.append(f'{what}: returned None (fetch failed)')
+            return None
+        self.success += 1
+        self.logger.debug(f'{what}={result}')
+        return result
 
     async def parse_matches_results(self):
         start_time = time.time()
-        tot = 2
-        err = 0
         self.logger.info('Parsing matches')
-        matches = await self.hltv.get_matches(7, 0)
-        if not matches:
-            err += 1
-            self.logger.error('ERROR PARSING MATCHES')
-        self.logger.info('Parsing matches')
-        results = await self.hltv.get_results(7, 0, 100)
-        if not results:
-            err += 1
-            self.logger.error('ERROR PARSING RESULTS')
-        matches = (matches or []) + (results or [])
-        if matches:
-            self.success += 1
-            self.logger.debug(matches)
-            for match in matches:
-                tot += 1
-                match_: Any = None
-                self.logger.debug(match)
-                if match['team1'] != 'TBD' and match['id'] != '0' and match['id'] != 0:
-                    try:
-                        match_ = await self.hltv.get_match_info(match["id"], match['team1'], match['team2'],
-                                                                match['event'])
-                        self.logger.debug(f'match={match_}')
-                    except Exception as e:
-                        self.logger.error(e)
-                        err += 1
-
-                    if match_:
-                        self.logger.debug(match_)
-                        self.success += 1
-                    else:
-                        self.errors += 1
-                        err += 1
-        else:
-            self.errors += 1
-            self.logger.error("error parsing matches")
-
+        matches, results = await asyncio.gather(self._try('matches', self.hltv.get_matches(7, 0)),
+                                                self._try('results', self.hltv.get_results(7, 0, 100)))
+        items = (matches or []) + (results or [])
+        errors_before = self.errors
+        await asyncio.gather(*(
+            self._try(f'match id={m["id"]} {m["team1"]} vs {m["team2"]}',
+                      self.hltv.get_match_info(m['id'], m['team1'], m['team2'], m['event']))
+            for m in items if m['team1'] != 'TBD' and m['id']))
+        tot = len(items) + 2
+        err = self.errors - errors_before + (matches is None) + (results is None)
         self.matches = f'Parsed {tot} matches.({round(time.time() - start_time)}s) ERRORS: {err}/{tot}'
 
     async def parse_events(self):
         start_time = time.time()
-        tot = 1
-        err = 0
         self.logger.info('Parsing events')
-        events = await self.hltv.get_events(max_events=50)
-        if events:
-            logging.debug(events)
-            for event in events:
-                event_, event_matches, event_results = None, None, None
-
-                try:
-                    event_ = await self.hltv.get_event_info(event["id"], event["title"])
-                    logging.debug(f'event={event_}')
-
-                except Exception as e:
-                    self.logger.error(e)
-                    self.logger.error(f'TYPE: INFO ID={event["id"]} TITLE={event["title"]}')
-                    self.errors += 1
-                    err += 1
-                finally:
-                    tot += 1
-
-                if event_:
-                    self.success += 1
-
-                try:
-                    event_matches = await self.hltv.get_event_matches(event['id'], 7)
-                    logging.debug(f'event_matches={event_matches}')
-
-                except Exception as e:
-                    self.logger.error(e)
-                    self.logger.error(f'TYPE: MATCHES ID={event["id"]} TITLE={event["title"]}')
-                    self.errors += 1
-                    err += 1
-                finally:
-                    tot += 1
-
-                if event_matches:
-                    self.success += 1
-
-                try:
-                    event_results = await self.hltv.get_event_results(event['id'], 7, max_=100)
-                    logging.debug(f'event_results={event_results}')
-
-                except Exception as e:
-                    self.logger.error(e)
-                    self.logger.error(f'TYPE: RESULTS ID={event["id"]} TITLE={event["title"]}')
-                    self.errors += 1
-                    err += 1
-                finally:
-                    tot += 1
-
-                if event_results:
-                    self.success += 1
-
-
-        else:
-            logging.critical("error parsing events")
-
-        self.events = f'Parsed {tot} events.({round(time.time() - start_time)}s) ERRORS: {err}/{tot}'
+        events = await self._try('events', self.hltv.get_events(max_events=50))
+        errors_before = self.errors
+        calls = []
+        for event in events or []:
+            eid, title = event['id'], event['title']
+            calls += [self._try(f'event info id={eid} {title}', self.hltv.get_event_info(eid, title)),
+                      self._try(f'event matches id={eid} {title}', self.hltv.get_event_matches(eid, 7)),
+                      self._try(f'event results id={eid} {title}', self.hltv.get_event_results(eid, 7, max_=100))]
+        await asyncio.gather(*calls)
+        tot = len(calls) + 1
+        self.events = (f'Parsed {tot} events.({round(time.time() - start_time)}s) '
+                       f'ERRORS: {self.errors - errors_before + (events is None)}/{tot}')
 
     async def parse_teams(self):
         self.logger.info('parsing teams')
         start_time = time.time()
-        err = 0
-        tot = 1
-        top_teams = await self.hltv.get_top_teams(30)
-        if top_teams:
-            logging.debug(top_teams)
-            for team in top_teams:
-                tot += 1
-                team_: Any = None
-                try:
-                    team_ = await self.hltv.get_team_info(team["id"], team['title'])
-                    self.success += 1
-                except Exception as e:
-                    self.logger.error(e)
-                    self.logger.debug(team_)
-                    self.errors += 1
-                    err += 1
-        else:
-            logging.critical("error parsing top teams")
-
-        self.teams = f'Parsed {tot} teams.({round(time.time() - start_time)}s) ERRORS: {err}/{tot}'
+        top_teams = await self._try('top teams', self.hltv.get_top_teams(30))
+        errors_before = self.errors
+        await asyncio.gather(*(self._try(f'team id={t["id"]} {t["title"]}', self.hltv.get_team_info(t['id'], t['title']))
+                               for t in top_teams or []))
+        tot = len(top_teams or []) + 1
+        self.teams = (f'Parsed {tot} teams.({round(time.time() - start_time)}s) '
+                      f'ERRORS: {self.errors - errors_before + (top_teams is None)}/{tot}')
 
     async def parse_players(self):
         start_time = time.time()
-        tot = 1
-        err = 0
-        top_players = await self.hltv.get_top_players(30)
-        if top_players:
-            self.success += 1
-            for player in top_players:
-                player_ = None
-                try:
-                    player_ = await self.hltv.get_player_info(player['id'], player['nickname'])
-                except Exception as e:
-                    self.logger.error(e)
-                    self.errors += 1
-                    err += 1
-                finally:
-                    tot += 1
-
-                if player_:
-                    self.success += 1
-                    self.logger.debug(player_)
-        else:
-            logging.critical('error parsing players')
-            self.errors += 1
-            err = 0
-
-        self.players = f'Parsed {tot} players.({round(time.time() - start_time)}s) ERRORS: {err}/{tot}'
+        top_players = await self._try('top players', self.hltv.get_top_players(30))
+        errors_before = self.errors
+        await asyncio.gather(*(self._try(f'player id={p["id"]} {p["nickname"]}',
+                                         self.hltv.get_player_info(p['id'], p['nickname']))
+                               for p in top_players or []))
+        tot = len(top_players or []) + 1
+        self.players = (f'Parsed {tot} players.({round(time.time() - start_time)}s) '
+                        f'ERRORS: {self.errors - errors_before + (top_players is None)}/{tot}')
 
     async def parse_last_news(self):
         news = await self.hltv.get_last_news(only_today=True, max_reg_news=4)
@@ -316,6 +233,7 @@ class HltvHardTest:
                     logging.debug(f'event={event_}')
                 except Exception as e:
                     self.logger.error(e)
+                    self.failures.append(f'event info id={event["id"]} {event["title"]}: {type(e).__name__}: {e}')
                     self.logger.error(f'TYPE: INFO ID={event["id"]} TITLE={event["title"]}')
                     self.errors += 1
                     err += 1
@@ -396,6 +314,7 @@ class HltvHardTest:
                     player_ = self.hltv.get_player_info(player['id'], player['nickname'])
                 except Exception as e:
                     self.logger.error(e)
+                    self.failures.append(f'player id={player["id"]} {player["nickname"]}: {type(e).__name__}: {e}')
                     self.errors += 1
                     err += 1
                 finally:
@@ -423,7 +342,7 @@ class HltvHardTest:
 
 @pytest.mark.asyncio
 async def main():
-    hltv = Hltv(debug=True, safe_mode=False, min_delay=0.5, max_delay=2.5, max_retries=10, proxy_path=PROXY_PATH, proxy_delay=bool(PROXY_PATH))
+    hltv = Hltv(debug=True, max_retries=10, selenium=True, selenium_options={'pool_size': 4})
     test = HltvHardTest(hltv=hltv, debug=True)
     return await test.start_test(), test
 
@@ -431,7 +350,7 @@ async def main():
 
 @pytest.mark.sync
 def sync_test():
-    hltv = SyncHltv(debug=True, safe_mode=False, min_delay=0.5, max_delay=2.5, max_retries=10, proxy_path=PROXY_PATH, proxy_delay=bool(PROXY_PATH))
+    hltv = SyncHltv(debug=True, safe_mode=False, min_delay=0.5, max_delay=2.5, max_retries=10, proxy_path=PROXY_PATH, proxy_delay=bool(PROXY_PATH), selenium=True)
     test = HltvHardTest(hltv=hltv, debug=True)
     return test.start_test_sync(), test
 

@@ -4,6 +4,7 @@ src/hltv-aio/proxy_test.txt
 pypi
 proxies.txt
 tests/data
+.secret
 
 ### PyCharm template
 # Covers JetBrains IDEs: IntelliJ, RubyMine, PhpStorm, AppCode, PyCharm, CLion, Android Studio, WebStorm and Rider

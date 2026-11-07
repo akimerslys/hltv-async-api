@@ -41,7 +41,7 @@ async def test_get_matches(make_hltv):
     hltv, stub = make_hltv({'/matches': fx.MATCHES})
     res = await hltv.get_matches(days=1)
     assert stub.urls == ['https://www.hltv.org/matches']
-    assert res[0]['id'] == '2371201' and res[1]['date'] == '16-04-2024'
+    assert res[0]['id'] == 2371201 and res[1]['date'] == '16-04-2024'
 
 
 async def test_get_match_info(make_hltv):
@@ -69,13 +69,13 @@ async def test_get_event_matches(make_hltv):
     hltv, stub = make_hltv({'/matches': fx.EVENT_MATCHES})
     res = await hltv.get_event_matches(7148)
     assert stub.urls == ['https://www.hltv.org/events/7148/matches']
-    assert [m['id'] for m in res] == ['2371201', '2370771', '2370775']
+    assert [m['id'] for m in res] == [2371201, 2370771, 2370775]
 
 
 async def test_get_events(make_hltv):
     hltv, _ = make_hltv({'/events': fx.EVENTS})
     res = await hltv.get_events(future=False)
-    assert [e['id'] for e in res] == ['7749', '7621']
+    assert [e['id'] for e in res] == [7749, 7621]
 
 
 async def test_get_event_info(make_hltv):
@@ -129,8 +129,8 @@ async def test_get_last_news(make_hltv):
 
 async def test_generic_get_dispatch(make_hltv):
     hltv, _ = make_hltv({'/events': fx.EVENTS, '/team/': fx.TEAM_INFO})
-    assert (await hltv.get('events'))[0]['id'] == '7749'
-    assert (await hltv.get('teams', 6667, 'faze'))['rank'] == '1'
+    assert (await hltv.get('events'))[0]['id'] == 7749
+    assert (await hltv.get('teams', 6667, 'faze'))['rank'] == 1
 
 
 async def test_returns_none_when_fetch_fails(make_hltv):

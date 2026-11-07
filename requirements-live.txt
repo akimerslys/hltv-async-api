@@ -1,0 +1,2 @@
+-r requirements.txt
+python-socketio[asyncio_client]>=5.11

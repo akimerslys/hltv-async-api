@@ -116,6 +116,60 @@ def test_missing_selenium_extra_gives_install_hint(monkeypatch):
         SeleniumDriver().start()
 
 
+class FakeUC:
+    """Stands in for undetected_chromedriver: the newest driver (no version_main) does not match Chrome 156."""
+
+    class ChromeOptions:
+        def __init__(self):
+            self.args = []
+
+        def add_argument(self, arg):
+            self.args.append(arg)
+
+    def __init__(self, installed=156, message=None):
+        self.installed, self.calls = installed, []
+        self.message = message
+        outer = self
+
+        class Chrome(FakeDriver):
+            def __init__(self, options=None, version_main=None, **kw):
+                outer.calls.append((version_main, kw))
+                if version_main != outer.installed:
+                    raise RuntimeError(outer.message or
+                                       'This version of ChromeDriver only supports Chrome version 157. '
+                                       f'Current browser version is {outer.installed}.0.8078.81')
+                super().__init__([PAGE])
+
+        self.Chrome = Chrome
+
+
+def install_fake_uc(monkeypatch, **kw):
+    fake = FakeUC(**kw)
+    monkeypatch.setitem(__import__('sys').modules, 'undetected_chromedriver', fake)
+    return fake
+
+
+def test_driver_version_mismatch_retries_with_installed_chrome(monkeypatch):
+    uc = install_fake_uc(monkeypatch)
+    driver = SeleniumDriver()
+    assert driver.get_html('https://www.hltv.org/') == PAGE[1]
+    assert [version for version, _ in uc.calls] == [None, 156]
+
+
+def test_driver_explicit_version_is_not_overridden(monkeypatch):
+    uc = install_fake_uc(monkeypatch)
+    with pytest.raises(RuntimeError, match='Current browser version is 156'):
+        SeleniumDriver(version_main=150).start()
+    assert [version for version, _ in uc.calls] == [150]
+
+
+def test_driver_unrelated_startup_error_is_raised_without_retry(monkeypatch):
+    uc = install_fake_uc(monkeypatch, message='chrome not reachable')
+    with pytest.raises(RuntimeError, match='chrome not reachable'):
+        SeleniumDriver().start()
+    assert len(uc.calls) == 1
+
+
 # --- SeleniumParser / clients -----------------------------------------------------
 
 async def make_parser(driver, max_retries=2):

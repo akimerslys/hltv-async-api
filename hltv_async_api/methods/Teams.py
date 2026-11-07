@@ -1,6 +1,8 @@
 import re
 from typing import Any
 
+from hltv_async_api.Utils.numbers import to_float, to_int
+
 
 class Teams:
     def __init__(self, tz):
@@ -14,23 +16,23 @@ class Teams:
                 if i > max_teams:
                     break
 
-                rank = team.find('span', {'class': 'position'}).text[1:]
+                rank = to_int(team.find('span', {'class': 'position'}).text)
                 title_div: Any
-                if rank != '1':
+                if rank != 1:
                     title_div = team.find('div', {'class': 'teamLine sectionTeamPlayers'})
                 else:
                     title_div = team.find('div', {'class': 'teamLine sectionTeamPlayers teamLineExpanded'})
 
                 title = title_div.find('span', {'class': 'name'}).text
-                points = title_div.find('span', {'class': 'points'}).text.split(' ', 1)[0][1:]
+                points = to_int(title_div.find('span', {'class': 'points'}).text.split(' ', 1)[0])
 
-                id_ = team.find('a', {'class': 'details moreLink'})['href'].split('/')[-1]
+                id_ = to_int(team.find('a', {'class': 'details moreLink'})['href'].split('/')[-1])
 
                 changes = {'change positive', 'change neutral', 'change negative'}
-                change = ''
+                change = 0
                 for change_ in changes:
                     try:
-                        change = team.find('div', {'class', change_}).text
+                        change = to_int(team.find('div', {'class', change_}).text)
                         break
                     except AttributeError:
                         pass
@@ -49,7 +51,7 @@ class Teams:
 
     @staticmethod
     def get_team_info(r, team_id, title):
-        team = {'id': int(team_id), 'title': title, 'rank': 0, 'players': {}, 'coach': '?', 'age': 0, 'weekstop30': 0}
+        team = {'id': int(team_id), 'title': title, 'rank': 0, 'players': {}, 'coach': '?', 'age': 0.0, 'weekstop30': 0}
         try:
             known_players = r.find('div', class_='bodyshot-team g-grid').find_all('a')
             team['players'] = {
@@ -64,11 +66,11 @@ class Teams:
                 value = stat.find('span', {'class': 'right'})
                 try:
                     if label == 'world ranking':
-                        team['rank'] = re.search(r'#(\d+)', value.get_text()).group(1)
+                        team['rank'] = int(re.search(r'#(\d+)', value.get_text()).group(1))
                     elif label.startswith('weeks in top'):
-                        team['weekstop30'] = value.get_text(strip=True)
+                        team['weekstop30'] = to_int(value.get_text(strip=True))
                     elif label == 'average player age':
-                        team['age'] = value.get_text(strip=True)
+                        team['age'] = to_float(value.get_text(strip=True))
                     elif label == 'coach':
                         team['coach'] = stat.find('span', {'class': 'bold a-default'}).get_text().strip("' ")
                 except AttributeError:
