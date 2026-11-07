@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import pytz
+from hltv_async_api.Utils.numbers import to_int
 from hltv_async_api.Utils.datetools import localize_datetime_to_timezone
 
 
@@ -23,7 +24,7 @@ class News:
             reg_news = []
             for featured_news_div in news_date_div.find_all('a',
                                                             {'class': 'newsline article featured breaking-featured'}):
-                featured_id = featured_news_div['href'].split('/')[2]
+                featured_id = to_int(featured_news_div['href'].split('/')[2])
                 featured_title = featured_news_div.find('div', {'class': 'featured-newstext'}).text.strip()
                 featured_description = featured_news_div.find('div', {'class': 'featured-small-newstext'}).text.strip()
                 f_news.append({
@@ -38,7 +39,7 @@ class News:
                     if reg_news_num >= max_reg_news:
                         break
                     if news_div['class'] != 'newsline article featured breaking-featured':
-                        news_id = news_div['href'].split('/')[2]
+                        news_id = to_int(news_div['href'].split('/')[2])
                         news_title = news_div.find('div', {'class': 'newstext'}).text.strip()
                         news_posted = news_div.find('div', {'class': 'newsrecent'}).text.strip()
 

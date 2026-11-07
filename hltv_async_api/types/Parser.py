@@ -1,18 +1,34 @@
 import asyncio
+import contextlib
 import random
+from aiohttp import ClientTimeout
 from bs4 import BeautifulSoup
+
+from hltv_async_api.Utils.hints import BLOCKED_HINT
 
 
 class Parser:
     def __init__(self, client, executor, logger):
         self.logger = logger
         self.client = client
-        self.session = client.session
         self.executor = executor
+        self.blocked = False
+        self._hint_shown = False
+        limit = getattr(client, 'max_concurrency', None)
+        self._gate = asyncio.Semaphore(limit) if limit else None
+
+    @property
+    def session(self):
+        return self.client.session
 
     @staticmethod
     def _f(result):
         return BeautifulSoup(result, "lxml")
+
+    def _parse_html(self, result):
+        """Parse + challenge check in one worker hop: (page, blocked)."""
+        page = self._f(result)
+        return page, self._cloudflare_check(page)
 
     def _cloudflare_check(self, page) -> bool:
         challenge_page = page.find(id="challenge-error-title")
@@ -31,10 +47,9 @@ class Parser:
         if self.client.MIN_DELAY:
             delay = random.uniform(self.client.MIN_DELAY, self.client.MAX_DELAY)
             self.logger.debug(f'Random delay {round(delay, 2)}s')
-        else:
-            if delay < self.client.MAX_DELAY:
-                delay += 1
-                self.logger.info(f"Increasing delay to {delay}s")
+        elif self.client.MAX_DELAY and delay < self.client.MAX_DELAY:
+            delay += 1
+            self.logger.info(f"Increasing delay to {delay}s")
 
         return delay
 
@@ -43,21 +58,25 @@ class Parser:
         # setup new proxy, cuz old one was switched
         if self.client.USE_PROXY:
             proxy = self.client.get_proxy()
-        else:
-            # delay, only for non-proxy users. (default = 1-15s)
+        elif delay:
+            # retry pause, only for non-proxy users and only when min/max_delay were configured
             await asyncio.sleep(delay)
         try:
-            async with self.session.get(url, headers=self.client.headers, proxy=proxy, timeout=self.client.timeout) as response:
-                self.logger.info(f"Fetching {url}, code: {response.status}")
-                if response.status == 200:
-                    result = await response.text()
-                    page = await self.executor.run(self._f, result)
-                    forbidden = await self.executor.run(self._cloudflare_check, page)
-                    if not forbidden:
-                        return True, page
+            async with self._gate or contextlib.nullcontext():
+                async with self.session.get(url, headers=self.client.headers, proxy=proxy,
+                                            timeout=ClientTimeout(total=self.client.timeout)) as response:
+                    self.logger.info(f"Fetching {url}, code: {response.status}")
+                    if response.status == 200:
+                        result = await response.text()
+                        page, forbidden = await self.executor.run(self._parse_html, result)
+                        if not forbidden:
+                            return True, page
+                        self.blocked = True
+                    elif response.status == 403:
+                        self.blocked = True
 
-                self.logger.debug(f"Error, Code {response.status=}")
-                return False, await self.executor.run(self._parse_error_handler, delay)
+                    self.logger.debug(f"Error, Code {response.status=}")
+            return False, self._parse_error_handler(delay)
 
         except Exception as e:
             self.logger.debug(e)
@@ -66,7 +85,7 @@ class Parser:
         return False, delay
 
     async def fetch(self, url, delay: int = 0):
-        if not self.session:
+        if not self.client.session:
             self.client._create_session()
         status = False
         try_ = 1
@@ -88,4 +107,7 @@ class Parser:
             return result
         else:
             self.logger.error('Connection failed')
+            if self.blocked and not self._hint_shown:
+                self._hint_shown = True
+                self.logger.error(BLOCKED_HINT)
             return None

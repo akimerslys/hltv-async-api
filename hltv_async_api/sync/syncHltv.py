@@ -7,7 +7,12 @@ from typing import Optional, Union, List, Any
 import pytz
 from bs4 import BeautifulSoup
 
-from hltv_async_api.methods import Matches, Teams, Events, Players, News
+from hltv_async_api.methods import Matches, Teams, Events, Players, News, Stats, PlayerStats
+from functools import partial
+from hltv_async_api.Utils.numbers import to_int
+from hltv_async_api.methods.PlayerStats import clutch_variant, multikill_variant, player_url
+from hltv_async_api.methods.Stats import BASE_URL, url_slug
+from hltv_async_api.Utils.hints import BLOCKED_HINT
 import requests
 
 
@@ -26,6 +31,8 @@ class Hltv:
                  safe_mode: bool = False,
                  debug: bool = False,
                  session: requests.Session | None = None,
+                 selenium: bool = False,
+                 selenium_options: dict | None = None,
                  ):
 
         self.headers = {
@@ -83,13 +90,26 @@ class Hltv:
         self.EVENTS = Events(self.TIMEZONE)
         self.PLAYERS = Players(self.TIMEZONE)
         self.NEWS = News(self.TIMEZONE)
+        self.STATS = Stats(self.TIMEZONE)
+        self.PLAYER_STATS = PlayerStats(self.TIMEZONE)
         self.session = session or requests.Session()
+
+        self._blocked = False
+        self._hint_shown = False
+        self._driver = None
+        if selenium:
+            from hltv_async_api.selenium_driver import SeleniumDriver
+            self._driver = SeleniumDriver(logger=self.logger, **(selenium_options or {}))
 
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        pass
+        self.close()
+
+    def close(self):
+        if self._driver is not None:
+            self._driver.close()
 
     def _configure_logging(self):
         def get_logger(name, **kwargs):
@@ -238,12 +258,15 @@ class Hltv:
             proxies = {'http': proxy, 'https': proxy} if proxy else None
             response = self.session.get(url, headers=self.headers, proxies=proxies, timeout=self.timeout)
             self.logger.info(f"Fetching {url}, code: {response.status_code}")
+            if response.status_code == 403:
+                self._blocked = True
             if response.status_code == 200:
                 result = response.text
                 page = self._f(result)
                 forbidden = self._cloudflare_check(page)
                 if not forbidden:
                     return True, page
+                self._blocked = True
 
                 self.logger.debug(f"Error, Code {response.status_code=}")
                 return False, self._parse_error_handler(delay)
@@ -254,7 +277,22 @@ class Hltv:
         delay = self._parse_error_handler(delay)
         return False, delay
 
+    def _fetch_selenium(self, url):
+        attempts = self.max_retries or 3
+        for attempt in range(1, attempts + 1):
+            self.logger.debug(f'Selenium fetching {url}, try {attempt}/{attempts}')
+            html = self._driver.get_html(url)
+            if html:
+                page = self._f(html)
+                if not self._cloudflare_check(page):
+                    return page
+            time.sleep(attempt)
+        self.logger.error('Connection failed')
+        return None
+
     def _fetch(self, url, delay: int = 0):
+        if self._driver is not None:
+            return self._fetch_selenium(url)
 
         status = False
         try_ = 1
@@ -276,6 +314,9 @@ class Hltv:
             return result
         else:
             self.logger.error('Connection failed')
+            if self._blocked and not self._hint_shown:
+                self._hint_shown = True
+                self.logger.error(BLOCKED_HINT)
             return None
 
     def get_matches(self, days: int = 1, min_rating: int = 1, live: bool = True, future: bool = True):
@@ -305,6 +346,39 @@ class Hltv:
                         f"{event_title.replace(' ', '-')}")
         if r:
             return self.MATCHES.get_match_info(r, id_, team1, team2, event_title, stats, predicts)
+
+    def get_map_stats(self, map_stats_id: str | int, team1: str = 'team', team2: str = 'team'):
+        """Detailed statistics of one map, see the async ``Hltv.get_map_stats``."""
+        r = self._fetch(f"{BASE_URL}/stats/matches/mapstatsid/{int(map_stats_id)}/{url_slug(team1)}-vs-{url_slug(team2)}")
+        if r:
+            data = self.STATS.get_stats_page(r)
+            data.pop('maps', None)
+            return {'stats_id': int(map_stats_id), **data}
+
+    def get_match_stats(self, stats_id: str | int, team1: str = 'team', team2: str = 'team'):
+        """Overview + every map, see the async ``Hltv.get_match_stats``."""
+        r = self._fetch(f"{BASE_URL}/stats/matches/{int(stats_id)}/{url_slug(team1)}-vs-{url_slug(team2)}")
+        if not r:
+            return None
+        data = self.STATS.get_stats_page(r)
+        maps = []
+        for tile in data.pop('maps'):
+            page = self._fetch(BASE_URL + tile['href'])
+            if not page:
+                maps.append({**tile, 'available': False})
+                continue
+            parsed = self.STATS.get_stats_page(page)
+            parsed.pop('maps', None)
+            maps.append({**tile, **parsed, 'available': True})
+        data['maps'] = maps
+        return {'stats_id': int(stats_id), **data}
+
+    def get_stats_for_match(self, id_: str | int, team1: str, team2: str, event_title: str):
+        """``get_match_info`` + ``get_match_stats`` in one call."""
+        info = self.get_match_info(id_, team1, team2, event_title, stats=False, predicts=False)
+        if not info or not info.get('stats_id'):
+            return None
+        return self.get_match_stats(info['stats_id'], team1, team2)
 
     def get_results(self, days: int = 1,
                     min_rating: int = 1,
@@ -416,6 +490,69 @@ class Hltv:
             return
 
         return self.PLAYERS.get_player_info(r, id, nickname)
+
+    def _player_page(self, parse, page: str, player_id, nickname, variant=None, **filters):
+        url = player_url(page, player_id, nickname, variant, **filters)
+        r = self._fetch(url)
+        if r:
+            data = parse(r)
+            return {'player_id': int(player_id), 'url': url, **data}
+
+    def get_player_stats(self, player_id: int | str, nickname: str, **filters):
+        """Statistics overview of a player (``/stats/players/<id>``): ratings, summary, the seven role scores with
+        every metric per side, similar players, ratings against top opponents and teammates.
+
+        ``filters`` (all optional): ``cs_version`` ('CS2' by default, 'CSGO' or None for both), ``map``, ``match_type``,
+        ``start_date`` / ``end_date``, ``ranking`` (5-50), ``best_of``, ``ranked``, ``playoff``, ``team_id``,
+        ``opponent_team``, ``event``. Every ``get_player_*`` method below takes the same filters.
+        """
+        return self._player_page(self.PLAYER_STATS.get_player_overview, 'overview', player_id, nickname, **filters)
+
+    def get_player_advanced(self, player_id: int | str, nickname: str, **filters):
+        """Advanced statistics: round swing, impact, dueling, round-to-round and map-to-map figures."""
+        return self._player_page(self.PLAYER_STATS.get_player_advanced, 'advanced', player_id, nickname, **filters)
+
+    def get_player_matches(self, player_id: int | str, nickname: str, offset: int = 0, **filters):
+        """Match history (100 maps per page, use ``offset=100`` for the next page)."""
+        return self._player_page(self.PLAYER_STATS.get_player_matches, 'matches', player_id, nickname,
+                                       offset=offset, **filters)
+
+    def get_player_events(self, player_id: int | str, nickname: str, **filters):
+        """Every event the player played: placement, maps, KPR / DPR, rating."""
+        return self._player_page(self.PLAYER_STATS.get_player_events, 'events', player_id, nickname, **filters)
+
+    def get_player_career(self, player_id: int | str, nickname: str, **filters):
+        """Rating and maps per year, online / LAN / majors."""
+        return self._player_page(self.PLAYER_STATS.get_player_career, 'career', player_id, nickname, **filters)
+
+    def get_player_weapons(self, player_id: int | str, nickname: str, **filters):
+        """Kills by weapon type, weapons carried and kills per weapon."""
+        return self._player_page(self.PLAYER_STATS.get_player_weapons, 'weapon', player_id, nickname, **filters)
+
+    def get_player_clutches(self, player_id: int | str, nickname: str, size: int | str = 'all',
+                                  offset: int = 0, **filters):
+        """Clutch history. ``size``: 'all' or 1-5 (1 on 1 ... 1 on 5)."""
+        return self._player_page(partial(self.PLAYER_STATS.get_player_clutches, size=to_int(clutch_variant(size)[-1:], 0)), 'clutches', player_id, nickname,
+                                       clutch_variant(size), offset=offset, **filters)
+
+    def get_player_multikills(self, player_id: int | str, nickname: str, kills: int | str = 2,
+                                    fast: bool = False, offset: int = 0, **filters):
+        """Multi-kill history. ``kills``: 'all' or 2-5; ``fast=True`` keeps fast multi-kills only."""
+        return self._player_page(self.PLAYER_STATS.get_player_multikills, 'multikills', player_id, nickname,
+                                       multikill_variant(kills), offset=offset, fast=fast, **filters)
+
+    def get_player_opponents(self, player_id: int | str, nickname: str, **filters):
+        """Results against every team the player has met."""
+        return self._player_page(self.PLAYER_STATS.get_player_opponents, 'opponents', player_id, nickname, **filters)
+
+    def get_player_full_stats(self, player_id: int | str, nickname: str, **filters):
+        """Overview, advanced, matches, events, career and weapons in one call (fetched in parallel).
+        A section whose page could not be loaded is None."""
+        names = ('overview', 'advanced', 'matches', 'events', 'career', 'weapons')
+        calls = (self.get_player_stats, self.get_player_advanced, self.get_player_matches, self.get_player_events,
+                 self.get_player_career, self.get_player_weapons)
+        results = [call(player_id, nickname, **filters) for call in calls]
+        return {'player_id': int(player_id), **dict(zip(names, results))}
 
     def get_last_news(self, max_reg_news=2, only_today=True, only_featured=False):
 
