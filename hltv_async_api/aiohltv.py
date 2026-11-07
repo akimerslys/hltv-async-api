@@ -381,10 +381,9 @@ class Hltv:
 
 if __name__ == '__main__':
     import random
-    print()
     async def main():
-        async with Hltv(debug=True, safe_mode=False, min_delay=1, max_delay=3, proxy_path='proxies.txt',
-                        proxy_protocol='http', max_retries=10) as hltv:
+        async with Hltv(debug=True, safe_mode=False, min_delay=1, max_delay=3,
+                        max_retries=10, selenium=True) as hltv:
             print(await hltv.get_match_info(2373774, 'astralis', 'falcons', 'blast-premier-fall-groups-2024'))
 
 

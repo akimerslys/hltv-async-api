@@ -6,6 +6,7 @@ Install with ``pip install hltv-async-api[selenium]`` and a Chrome browser. Enab
 
 import asyncio
 import logging
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Optional
@@ -48,6 +49,17 @@ class SeleniumDriver:
         self._factory = driver_factory
         self._driver = None
 
+    def _launch(self, uc, version_main: Optional[int]):
+        options = uc.ChromeOptions()
+        if self.proxy:
+            options.add_argument(f'--proxy-server={self.proxy}')
+        options.add_argument('--lang=en-US')
+        return uc.Chrome(options=options,
+                         headless=self.headless,
+                         version_main=version_main,
+                         user_data_dir=self.user_data_dir,
+                         use_subprocess=True)
+
     def _create_driver(self):
         if self._factory:
             return self._factory()
@@ -56,15 +68,16 @@ class SeleniumDriver:
         except ImportError as e:
             raise ImportError(SELENIUM_INSTALL_HINT) from e
 
-        options = uc.ChromeOptions()
-        if self.proxy:
-            options.add_argument(f'--proxy-server={self.proxy}')
-        options.add_argument('--lang=en-US')
-        return uc.Chrome(options=options,
-                         headless=self.headless,
-                         version_main=self.version_main,
-                         user_data_dir=self.user_data_dir,
-                         use_subprocess=True)
+        try:
+            return self._launch(uc, self.version_main)
+        except Exception as e:
+            # By default undetected-chromedriver fetches the newest ChromeDriver, which refuses to drive an older
+            # Chrome ("Current browser version is 156..."). Retry once with the driver for the installed version.
+            installed = re.search(r'Current browser version is (\d+)', str(e))
+            if self.version_main is not None or not installed:
+                raise
+            self.logger.warning(f'ChromeDriver does not match Chrome {installed.group(1)}, retrying with a matching one')
+            return self._launch(uc, int(installed.group(1)))
 
     def start(self):
         if self._driver is None:
